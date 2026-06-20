@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>紅藍大對抗</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #0c1020;
+    font-family: "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+    -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+  #game { display: block; width: 100vw; height: 100vh; touch-action: none; }
+  #volPanel { position: fixed; top: 8px; right: 8px; z-index: 10; color: #eaf0ff; font-family: inherit; }
+  #volToggle { background: rgba(0,0,0,0.45); border: 1px solid #ffffff55; color: #fff;
+    border-radius: 8px; padding: 6px 11px; font-size: 14px; font-weight: bold; cursor: pointer; }
+  #volBody { margin-top: 6px; margin-left: auto; width: 210px; display: none;
+    background: rgba(14,20,40,0.94); border: 1px solid #ffffff33; border-radius: 10px; padding: 10px 12px; }
+  #volPanel.open #volBody { display: block; }
+  .volRow { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
+  .volRow > label { width: 52px; font-size: 13px; }
+  .volRow input[type=range] { flex: 1; accent-color: #ffd34d; cursor: pointer; }
+  .volRow .val { width: 36px; text-align: right; font-size: 12px; color: #cfe0ff; }
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="volPanel">
+  <button id="volToggle">♪ 音量</button>
+  <div id="volBody">
+    <div class="volRow"><label>標題</label><input type="range" min="0" max="100" id="vol_title"><span class="val" id="val_title"></span></div>
+    <div class="volRow"><label>對戰</label><input type="range" min="0" max="100" id="vol_game"><span class="val" id="val_game"></span></div>
+    <div class="volRow"><label>勝利</label><input type="range" min="0" max="100" id="vol_win"><span class="val" id="val_win"></span></div>
+  </div>
+</div>
+<script src="questions-social.js"></script>
+<script src="questions-extra.js"></script>
+<script>
+/* 紅藍大對抗：金幣 / 強攻擊 / 抽獎 / 修復 / 音效 / 多科題庫 / 累計勝場(圖示) / 士兵動畫(去背+紅軍翻轉) */
+
+const ASSETS = {
+  bg_field:     { src: "background.png", label: "", color: "" },
+  castle_left:  { src: "blue_castle.png", label: "城堡 1", color: "#3b73e6" },
+  castle_right: { src: "red_castle.png", label: "城堡 2", color: "#e6504a" },
+  castle_left_dmg:      { src: "bule_castle_damage.png",  label: "", color: "#3b73e6" },
+  castle_left_corrupt:  { src: "blue_castle_corrupt.png", label: "", color: "#3b73e6" },
+  castle_right_dmg:     { src: "red_castle_damage.png",   label: "", color: "#e6504a" },
+  castle_right_corrupt: { src: "red_castle_corrupt.png",  label: "", color: "#e6504a" },
+  unitL_1: { src: "", label: "兵I",  color: "#5aa0ff" },
+  unitL_2: { src: "", label: "兵II", color: "#3f86f0" },
+  unitL_3: { src: "", label: "兵III",color: "#2a66d6" },
+  unitR_1: { src: "", label: "兵I",  color: "#ff8c82" },
+  unitR_2: { src: "", label: "兵II", color: "#f0675c" },
+  unitR_3: { src: "", label: "兵III",color: "#d6453a" },
+  unitL_boss: { src: "", label: "大軍", color: "#16357a" },
+  unitR_boss: { src: "", label: "大軍", color: "#7a1f16" },
+  fx_clash:  { src: "", label: "", color: "#f6c453" },
+  fx_hit:    { src: "", label: "", color: "#ff5d5d" },
+  fx_spawn:  { src: "", label: "", color: "#ffffff" },
+  icon_attack:  { src: "", label: "", color: "" },
+  icon_lottery: { src: "", label: "", color: "" },
+  icon_coin:    { src: "", label: "", color: "" },
+  icon_repair:  { src: "", label: "", color: "" },
+};
+const _imgCache = {};
+function preloadAssets() {
+  for (const key in ASSETS) { const a = ASSETS[key];
+    if (a.src) { const img = new Image(); img.src = a.src; img.onload = () => { _imgCache[key] = img; }; } }
+}
+function drawSprite(key, x, y, w, h) {
+  const a = ASSETS[key] || { color: "#888", label: "?" };
+  const img = _imgCache[key];
+  if (img) { ctx.drawImage(img, x - w / 2, y - h / 2, w, h); return; }
+  ctx.fillStyle = a.color || "#888"; ctx.fillRect(x - w / 2, y - h / 2, w, h);
+  ctx.strokeStyle = "rgba(255,255,255,0.8)"; ctx.lineWidth = 2; ctx.strokeRect(x - w / 2, y - h / 2, w, h);
+  if (a.label) { ctx.fillStyle = "#fff"; ctx.font = "bold " + Math.max(11, Math.min(16, h * 0.3)) + "px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(a.label, x, y); ctx.textBaseline = "alphabetic"; }
+}
+
+// ===== 士兵動畫 sprite sheet（4 欄 x 4 列：行走/對戰/勝利/失敗）=====
+const SHEETS = {
+  blue: { src: "blue_soilder.png", cols: 4, rows: 4, flip: false },
+  red:  { src: "red_soilder.png",  cols: 4, rows: 4, flip: true },   // 紅軍原圖面右，翻轉成面左
+};
+const ANIM = { walk: 0, fight: 1, victory: 2, defeat: 3 };
+const _sheetCache = {};
+function preloadSheets() {
+  for (const k in SHEETS) { const s = SHEETS[k]; const img = new Image(); img.src = s.src; img.onload = () => { _sheetCache[k] = img; }; }
+}
+function drawSheetFrame(key, row, frame, cx, cy, targetH, flipOverride) {
+  const s = SHEETS[key], img = _sheetCache[key]; if (!img) return false;
+  const fw = img.width / s.cols, fh = img.height / s.rows;
+  const dh = targetH, dw = dh * fw / fh;
+  const doFlip = (flipOverride === undefined) ? s.flip : flipOverride;
+  if (doFlip) {
+    ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1);
+    ctx.drawImage(img, frame * fw, row * fh, fw, fh, -dw / 2, cy - dh * 0.6, dw, dh);
+    ctx.restore();
+  } else {
+    ctx.drawImage(img, frame * fw, row * fh, fw, fh, cx - dw / 2, cy - dh * 0.6, dw, dh);
+  }
+  return true;
+}
+// 每一格圖框中「實際人物」的去背邊界(正規化 0~1)，用來把不同姿勢縮放成相同人物大小
+const FRAME_BOUNDS = {
+  blue: [
+    [0.3113,0.1472,0.6651,1.0000],[0.3137,0.1472,0.6604,1.0000],[0.2995,0.1472,0.6557,1.0000],[0.3184,0.1472,0.6627,1.0000],
+    [0.3255,0.1775,0.7028,0.9913],[0.1179,0.2165,0.6910,0.9913],[0.1698,0.2165,0.8184,0.9913],[0.3278,0.1775,0.7028,0.9913],
+    [0.3113,0.1948,0.6651,1.0000],[0.2995,0.0736,0.6344,1.0000],[0.2665,0.0433,0.6132,1.0000],[0.2311,0.1948,0.6627,1.0000],
+    [0.2972,0.0000,0.6840,0.9307],[0.2500,0.0000,0.7358,0.9524],[0.2571,0.0000,0.7500,0.9307],[0.3656,0.0000,0.5873,0.8398],
+  ],
+  red: [
+    [0.2426,0.2034,0.7249,0.9552],[0.2663,0.2000,0.7456,0.9552],[0.2633,0.2138,0.7544,0.9552],[0.2396,0.2034,0.7249,0.9552],
+    [0.2544,0.1552,0.7811,0.8621],[0.0000,0.1828,0.7840,1.0000],[0.0917,0.1897,0.9793,0.8621],[0.2604,0.1552,0.7751,0.8621],
+    [0.2308,0.1207,0.7130,0.8241],[0.2544,0.0000,0.7041,0.8241],[0.2219,0.1207,0.6982,0.8241],[0.1657,0.1034,0.7367,0.8241],
+    [0.2160,0.0828,0.7367,0.6931],[0.1479,0.2483,0.8136,0.6897],[0.1805,0.1207,0.8580,0.6793],[0.3314,0.0345,0.6420,0.6103],
+  ],
+};
+// 依「人物實高」縮放：不論勝利/落敗姿勢，角色高度都等於 charH，腳底對齊 baseY
+function drawCharFit(key, row, frame, cx, baseY, charH, faceLeft) {
+  const s = SHEETS[key], img = _sheetCache[key], tbl = FRAME_BOUNDS[key];
+  if (!img || !tbl) return false;
+  const b = tbl[row * s.cols + frame];
+  const fw = img.width / s.cols, fh = img.height / s.rows;
+  const sx = (frame + b[0]) * fw, sy = row * fh + b[1] * fh;
+  const sw = (b[2] - b[0]) * fw, shp = (b[3] - b[1]) * fh;
+  const dh = charH, dw = sw * (charH / shp), dy = baseY - dh;
+  if (faceLeft) {
+    ctx.save(); ctx.translate(cx, 0); ctx.scale(-1, 1);
+    ctx.drawImage(img, sx, sy, sw, shp, -dw / 2, dy, dw, dh); ctx.restore();
+  } else {
+    ctx.drawImage(img, sx, sy, sw, shp, cx - dw / 2, dy, dw, dh);
+  }
+  return true;
+}
+// 用士兵圖示表示累計勝場
+function drawWinTally(cy, iconH, fontPx) {
+  ctx.textBaseline = "middle";
+  const frame = Math.floor(gClock * 6) % 4;
+  const grp = (sheet, label, color, gx) => {
+    ctx.font = "bold " + fontPx + "px sans-serif";
+    const tw = ctx.measureText(label).width, iconW = iconH * 0.8, gap = 6;
+    const x = gx - (iconW + gap + tw) / 2;
+    if (_sheetCache[sheet]) drawSheetFrame(sheet, ANIM.victory, frame, x + iconW / 2, cy + iconH * 0.18, iconH);
+    else { ctx.fillStyle = sheet === "blue" ? "#3b73e6" : "#e6504a"; ctx.fillRect(x, cy - iconH / 2, iconW, iconH); }
+    ctx.fillStyle = color; ctx.textAlign = "left";
+    ctx.fillText(label, x + iconW + gap, cy);
+  };
+  grp("blue", "藍軍 " + state.wins[SIDE.LEFT] + " 勝", "#9fd0ff", W * 0.34);
+  grp("red",  "紅軍 " + state.wins[SIDE.RIGHT] + " 勝", "#ff9a9a", W * 0.66);
+  ctx.textBaseline = "alphabetic";
+}
+
+const CONFIG = {
+  CASTLE_HP: 10, UNIT_PROG_SPEED: 0.085, COLLIDE_PROG: 0.028, WRONG_COOLDOWN: 1.5,
+  TIERS: { 1: { strength: 1, speedMul: 1.0, size: 30 }, 2: { strength: 2, speedMul: 1.1, size: 38 },
+    3: { strength: 3, speedMul: 1.25, size: 46 }, boss: { strength: 6, speedMul: 1.15, size: 56 } },
+  COIN_PER_CORRECT: 100, BIG_ATTACK_COST: 500, HEAL_COST: 100, LOTTERY_COST: 250,
+  WRONG_STREAK_LIMIT: 3, STREAK_COOLDOWN: 7,   // 連錯3次→冷卻7秒
+  ENGAGE_PROG: 0.04, FIGHT_DURATION: 0.55, DIE_DURATION: 0.6, ATTACK_DURATION: 0.5,
+};
+const PRIZES = [
+  { key: "unit1", name: "一階小兵", short: "小兵", weight: 35 },
+  { key: "coin",  name: "+100 金幣", short: "+100金", weight: 25 },
+  { key: "heal",  name: "修復 +1 血", short: "修復", weight: 20 },
+  { key: "unit3", name: "三階強兵", short: "強兵", weight: 20 },
+  { key: "boss",  name: "大軍！",   short: "大軍", weight: 20 },
+];
+const PATH_WP = [[0.03,0.544],[0.101,0.518],[0.183,0.459],[0.265,0.43],[0.363,0.484],[0.461,0.519],[0.543,0.533],[0.625,0.494],[0.723,0.431],[0.805,0.469],[0.886,0.526],[0.985,0.544]];
+const TREES_N = [[0.14,0.18],[0.23,0.86],[0.40,0.20],[0.58,0.86],[0.74,0.86],[0.86,0.20],[0.93,0.80],[0.34,0.90],[0.52,0.14],[0.67,0.86]];
+
+const SIDE = { LEFT: 0, RIGHT: 1 };
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, DPR = 1, layout = {}, state = null, gClock = 0;
+let _slowmo = 0, _flashT = 0, _flashDur = 0; // 大軍登場：慢動作 + 全螢幕閃光
+function triggerJackpotFx() { _slowmo = 1.0; _flashDur = 0.6; _flashT = _flashDur; }
+function drawJackpotFlash() {
+  const k = _flashT / _flashDur;          // 1 → 0
+  const a = Math.min(1, k * 1.7);
+  ctx.save();
+  const g = ctx.createRadialGradient(W / 2, H / 2, 0, W / 2, H / 2, Math.max(W, H) * 0.75);
+  g.addColorStop(0, "rgba(255,255,255," + (0.85 * a) + ")");
+  g.addColorStop(0.5, "rgba(255,225,150," + (0.5 * a) + ")");
+  g.addColorStop(1, "rgba(255,200,90,0)");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 0.6 * a; ctx.strokeStyle = "#ffd34d"; ctx.lineWidth = 18 * a;
+  ctx.strokeRect(9, 9, W - 18, H - 18);
+  ctx.restore();
+}
+
+let audioCtx = null, muted = false, _lastClash = 0, _lastHit = 0;
+function initAudio() {
+  if (!audioCtx) { try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} }
+  if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
+}
+function tone(freq, dur, type, vol, when, slideTo) {
+  if (!audioCtx || muted) return;
+  const t0 = audioCtx.currentTime + (when || 0);
+  const osc = audioCtx.createOscillator(), g = audioCtx.createGain();
+  osc.type = type || "sine"; osc.frequency.setValueAtTime(freq, t0);
+  if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, t0 + dur);
+  g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(vol || 0.2, t0 + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(g).connect(audioCtx.destination); osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+const SFX = {
+  correct() { tone(660, 0.12, "triangle", 0.25); tone(880, 0.16, "triangle", 0.22, 0.10); },
+  wrong()   { tone(220, 0.25, "sawtooth", 0.20, 0, 110); },
+  big()     { tone(150, 0.32, "sawtooth", 0.30, 0, 80); tone(300, 0.30, "square", 0.16, 0.05); tone(110, 0.45, "sine", 0.26, 0.12); },
+  heal()    { tone(520, 0.12, "sine", 0.20); tone(780, 0.15, "sine", 0.18, 0.08); tone(1040, 0.18, "sine", 0.15, 0.16); },
+  clash()   { const n = performance.now(); if (n - _lastClash < 70) return; _lastClash = n; tone(320, 0.06, "square", 0.12, 0, 180); },
+  hit()     { const n = performance.now(); if (n - _lastHit < 70) return; _lastHit = n; tone(90, 0.18, "sawtooth", 0.26, 0, 50); },
+  win()     { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.20, "triangle", 0.25, i * 0.12)); },
+  tick()    { tone(880, 0.03, "square", 0.07); },
+  jackpot() { [523, 659, 784, 1047, 1319].forEach((f, i) => tone(f, 0.20, "triangle", 0.25, i * 0.10)); },
+};
+
+// ===== 背景音樂（標題 title / 對戰 game / 勝利 win，自動切換循環）=====
+const MUSIC = {};
+let curMusic = null;
+const _musicVol = { title: 0.35, game: 0.32, win: 0.45 };
+function initMusic() {
+  if (typeof Audio === "undefined") return;
+  for (const k of ["title", "game", "win"]) {
+    const a = new Audio(k + ".ogg"); a.loop = true; a.preload = "auto"; a.volume = _musicVol[k]; MUSIC[k] = a;
+  }
+}
+// 每段音樂的音量拉軸（HTML 控制面板）
+function setupVolumeUI() {
+  const panel = document.getElementById("volPanel"), toggle = document.getElementById("volToggle");
+  if (!panel || !toggle) return;
+  toggle.addEventListener("click", () => panel.classList.toggle("open"));
+  const labels = { title: "標題", game: "對戰", win: "勝利" };
+  for (const k in labels) {
+    const sl = document.getElementById("vol_" + k), val = document.getElementById("val_" + k);
+    if (!sl) continue;
+    sl.value = Math.round(_musicVol[k] * 100); val.textContent = sl.value + "%";
+    sl.addEventListener("input", () => {
+      const v = sl.value / 100; _musicVol[k] = v;
+      if (MUSIC[k]) MUSIC[k].volume = v; val.textContent = sl.value + "%";
+    });
+  }
+}
+function musicForScreen(scr) { return scr === "MENU" ? "title" : scr === "RESULT" ? "win" : "game"; }
+function pauseAllMusic() { for (const k in MUSIC) MUSIC[k].pause(); }
+function syncMusic() {
+  if (!state || !MUSIC.title) return;
+  const want = musicForScreen(state.screen);
+  if (want !== curMusic) {
+    for (const k in MUSIC) if (k !== want) MUSIC[k].pause();
+    curMusic = want;
+    if (!muted) { try { MUSIC[want].currentTime = 0; } catch (e) {} const pr = MUSIC[want].play(); if (pr && pr.catch) pr.catch(() => {}); }
+  } else if (!muted && MUSIC[want].paused) {
+    const pr = MUSIC[want].play(); if (pr && pr.catch) pr.catch(() => {});
+  }
+}
+
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  computeLayout();
+}
+function computeLayout() {
+  const panelsY = H * 0.46;
+  layout.panels = {
+    [SIDE.LEFT]:  { x: 0,     y: panelsY, w: W / 2, h: H - panelsY },
+    [SIDE.RIGHT]: { x: W / 2, y: panelsY, w: W / 2, h: H - panelsY },
+  };
+  layout.field = { x: W * 0.015, y: H * 0.05, w: W * 0.97, h: panelsY - H * 0.05 - 4 };
+  layout.path = buildPath(layout.field);
+  computeCastleLayout();
+  if (state && state.screen === "BATTLE") { layoutOptions(SIDE.LEFT); layoutOptions(SIDE.RIGHT); }
+}
+function computeCastleLayout() {
+  const th = Math.min(128, H * 0.21), aspect = 1.5, tw = th * aspect;
+  layout.castle = {}; layout.spawnProg = {};
+  for (const side of [SIDE.LEFT, SIDE.RIGHT]) {
+    const ep = layout.path.posAt(side === SIDE.LEFT ? 0 : 1);
+    const cx = Math.max(tw / 2 + 6, Math.min(W - tw / 2 - 6, ep[0]));
+    const gateX = side === SIDE.LEFT ? cx + tw * 0.18 : cx - tw * 0.18;   // 面向戰場的城門口
+    layout.castle[side] = { cx, tw, th, topY: ep[1] - th * 0.72, baseY: ep[1], gateX };
+  }
+  layout.spawnProg[SIDE.LEFT] = 0;    // 從自家城堡（路徑端點）出發，左右對稱
+  layout.spawnProg[SIDE.RIGHT] = 1;
+}
+function buildPath(rect) {
+  const wp = PATH_WP.map(p => [rect.x + p[0] * rect.w, rect.y + p[1] * rect.h]);
+  function cm(p0,p1,p2,p3,t){ const t2=t*t,t3=t2*t; return [
+    0.5*((2*p1[0])+(-p0[0]+p2[0])*t+(2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+(-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+    0.5*((2*p1[1])+(-p0[1]+p2[1])*t+(2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+(-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)]; }
+  const samp=[];
+  for(let i=0;i<wp.length-1;i++){ const p0=wp[i-1]||wp[i],p1=wp[i],p2=wp[i+1],p3=wp[i+2]||wp[i+1];
+    for(let s=0;s<44;s++) samp.push(cm(p0,p1,p2,p3,s/44)); }
+  samp.push(wp[wp.length-1]);
+  const cum=[0];
+  for(let i=1;i<samp.length;i++){ const dx=samp[i][0]-samp[i-1][0],dy=samp[i][1]-samp[i-1][1]; cum.push(cum[i-1]+Math.hypot(dx,dy)); }
+  const total=cum[cum.length-1];
+  return { samp, total, posAt(t){ const d=Math.max(0,Math.min(1,t))*total; let lo=0,hi=cum.length-1;
+    while(lo<hi){ const m=(lo+hi)>>1; if(cum[m]<d) lo=m+1; else hi=m; }
+    const i=Math.max(1,lo); const seg=cum[i]-cum[i-1]||1,f=(d-cum[i-1])/seg;
+    return [samp[i-1][0]+(samp[i][0]-samp[i-1][0])*f, samp[i-1][1]+(samp[i][1]-samp[i-1][1])*f]; } };
+}
+
+function layoutOptions(side) {
+  const p = layout.panels[side];
+  const panel = state.battle.panels[side];
+  const pad = Math.min(16, p.w * 0.026);
+  const barH = Math.max(74, p.h * 0.23);
+  const barY = p.y + p.h - barH;
+  const cellW = (p.w - pad * 5) / 4, cellY = barY + pad * 0.5, cellH = barH - pad, x0 = p.x + pad;
+  const cell = i => ({ x: x0 + i * (cellW + pad), y: cellY, w: cellW, h: cellH });
+  if (side === SIDE.LEFT) {
+    // 左（藍）：強攻擊 / 抽獎 / 修復城堡 / 金幣（金幣靠中間）
+    panel.btnBig = cell(0); panel.btnLottery = cell(1); panel.btnHeal = cell(2); panel.coinCell = cell(3);
+  } else {
+    // 右（紅）：金幣 / 強攻擊 / 抽獎 / 修復城堡（金幣靠中間）
+    panel.coinCell = cell(0); panel.btnBig = cell(1); panel.btnLottery = cell(2); panel.btnHeal = cell(3);
+  }
+  const cTop = p.y + pad, cBot = barY - pad * 0.5;
+  const qH = (cBot - cTop) * 0.36;
+  panel.qArea = { x: p.x + pad, y: cTop, w: p.w - pad * 2, h: qH };
+  panel.optPad = pad;
+  panel.optArea = { x: p.x + pad, y: cTop + qH + pad * 0.5, w: p.w - pad * 2, h: cBot - (cTop + qH + pad * 0.5) };
+  buildOptionRects(side);
+}
+function buildOptionRects(side) {
+  const panel = state.battle.panels[side];
+  const a = panel.optArea; if (!a || !panel.question) return;
+  const n = panel.question.options.length, pad = panel.optPad, rects = [];
+  if (n <= 2) {
+    const bw = (a.w - pad) / 2;
+    for (let i = 0; i < n; i++) rects.push({ x: a.x + i * (bw + pad), y: a.y, w: bw, h: a.h });
+  } else {
+    const bw = (a.w - pad) / 2, bh = (a.h - pad) / 2;
+    for (let i = 0; i < n; i++) { const c = i % 2, r = Math.floor(i / 2);
+      rects.push({ x: a.x + c * (bw + pad), y: a.y + r * (bh + pad), w: bw, h: bh }); }
+  }
+  panel.optionRects = rects;
+}
+
+function initState() {
+  state = { screen: "MENU", bankKey: null, menuButtons: [], battle: null, resultButtons: [], winner: null, muteBtn: null,
+    wins: { [SIDE.LEFT]: 0, [SIDE.RIGHT]: 0 },
+    records: { fastest: { [SIDE.LEFT]: Infinity, [SIDE.RIGHT]: Infinity }, bestStreak: { [SIDE.LEFT]: 0, [SIDE.RIGHT]: 0 } },
+    menu: { level: "subject", subject: null, grade: null } };
+}
+// 題庫正規化：未標 subject/grade 的舊題庫一律歸到「社會 三年級」
+function getBanks() {
+  const raw = window.QUESTION_BANKS || [];
+  return raw.map(b => ({ ...b, subject: b.subject || "社會", grade: b.grade || 3 }));
+}
+const SUBJECT_ORDER = ["國語", "數學", "社會", "自然", "其他"];
+// 只回傳「有題庫」的科目（依固定順序）
+function subjectsWithBanks() {
+  const have = new Set(getBanks().map(b => b.subject));
+  return SUBJECT_ORDER.filter(s => have.has(s));
+}
+// 某科目中「有題庫」的年級（由小到大）
+function gradesForSubject(subj) {
+  const gs = new Set(getBanks().filter(b => b.subject === subj).map(b => b.grade));
+  return [...gs].sort((a, b) => a - b);
+}
+function banksFor(subj, grade) { return getBanks().filter(b => b.subject === subj && b.grade === grade); }
+// 固定大小的按鈕格狀排版（不夠寬就自動換行）
+function layoutMenuGrid(n, startY) {
+  const bw = Math.min(260, W * 0.28), bh = 74, gapX = 24, gapY = 18;
+  const perRow = Math.max(1, Math.min(n, Math.floor((W * 0.94 + gapX) / (bw + gapX))));
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const row = Math.floor(i / perRow), col = i % perRow;
+    const inRow = Math.min(perRow, n - row * perRow);
+    const totalW = inRow * bw + (inRow - 1) * gapX, sx = (W - totalW) / 2;
+    out.push({ x: sx + col * (bw + gapX), y: startY + row * (bh + gapY), w: bw, h: bh });
+  }
+  return out;
+}
+function startBattle(bankKey) {
+  const bank = getBanks().find(b => b.key === bankKey) || getBanks()[0];
+  if (!bank) return;
+  state.bankKey = bank.key;
+  state.battle = {
+    pool: bank.list, bankName: bank.name, units: [], effects: [],
+    castles: { [SIDE.LEFT]: { hp: CONFIG.CASTLE_HP }, [SIDE.RIGHT]: { hp: CONFIG.CASTLE_HP } },
+    score:   { [SIDE.LEFT]: 0, [SIDE.RIGHT]: 0 },
+    stats: {
+      [SIDE.LEFT]:  { correct: 0, wrong: 0, streak: 0, bestStreak: 0, fastest: Infinity },
+      [SIDE.RIGHT]: { correct: 0, wrong: 0, streak: 0, bestStreak: 0, fastest: Infinity },
+    },
+    panels: {
+      [SIDE.LEFT]:  { question: null, optionRects: [], cooldown: 0, flash: 0, flashColor: "", coins: 0, lottery: null, lastWasBoss: false, wrongStreak: 0 },
+      [SIDE.RIGHT]: { question: null, optionRects: [], cooldown: 0, flash: 0, flashColor: "", coins: 0, lottery: null, lastWasBoss: false, wrongStreak: 0 },
+    },
+  };
+  nextQuestion(SIDE.LEFT); nextQuestion(SIDE.RIGHT);
+  state.screen = "BATTLE";
+  computeLayout();
+}
+function nextQuestion(side) {
+  const pool = state.battle.pool;
+  state.battle.panels[side].question = pool[Math.floor(Math.random() * pool.length)];
+  state.battle.panels[side].qShownAt = performance.now(); // 計時：作答速度
+  buildOptionRects(side);
+}
+
+function handlePoint(x, y) {
+  initAudio();
+  if (state.muteBtn && pointInRect(x, y, state.muteBtn)) { muted = !muted; if (muted) pauseAllMusic(); else syncMusic(); return; }
+  if (!muted) syncMusic();
+  if (state.screen === "MENU")   return handleMenu(x, y);
+  if (state.screen === "RESULT") return handleResult(x, y);
+  if (state.screen === "BATTLE") return handleBattle(x, y);
+}
+function pointInRect(x, y, r) { return r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h; }
+function handleMenu(x, y) {
+  for (const b of state.menuButtons) {
+    if (!pointInRect(x, y, b)) continue;
+    if (b.reset) {
+      state.wins[SIDE.LEFT] = 0; state.wins[SIDE.RIGHT] = 0;
+      state.records = { fastest: { [SIDE.LEFT]: Infinity, [SIDE.RIGHT]: Infinity }, bestStreak: { [SIDE.LEFT]: 0, [SIDE.RIGHT]: 0 } };
+    } else if (b.navBack) {
+      state.menu.level = b.navBack;
+      if (b.navBack === "subject") { state.menu.subject = null; state.menu.grade = null; }
+      else if (b.navBack === "grade") { state.menu.grade = null; }
+    } else if (b.navSubject) {
+      state.menu.subject = b.navSubject; state.menu.grade = null; state.menu.level = "grade";
+    } else if (b.navGrade !== undefined) {
+      state.menu.grade = b.navGrade; state.menu.level = "bank";
+    } else if (b.bankKey) {
+      startBattle(b.bankKey);
+    }
+    return;
+  }
+}
+function handleResult(x, y) { for (const b of state.resultButtons) if (pointInRect(x, y, b)) { b.action(); return; } }
+function handleBattle(x, y) {
+  for (const side of [SIDE.LEFT, SIDE.RIGHT]) {
+    const p = layout.panels[side];
+    if (x < p.x || x > p.x + p.w || y < p.y || y > p.y + p.h) continue;
+    const panel = state.battle.panels[side];
+    if (panel.lottery) return;
+    if (pointInRect(x, y, panel.btnBig))     { tryAction(side, "big");  return; }
+    if (pointInRect(x, y, panel.btnLottery)) { tryLottery(side);        return; }
+    if (pointInRect(x, y, panel.btnHeal))    { tryAction(side, "heal"); return; }
+    if (panel.cooldown > 0) return;
+    for (let i = 0; i < panel.optionRects.length; i++)
+      if (pointInRect(x, y, panel.optionRects[i])) { submitAnswer(side, i); return; }
+  }
+}
+function submitAnswer(side, idx) {
+  const panel = state.battle.panels[side], q = panel.question, st = state.battle.stats[side];
+  if (q.answer === idx) {
+    spawnArmy(side, 1); state.battle.score[side]++;
+    panel.coins += CONFIG.COIN_PER_CORRECT; panel.wrongStreak = 0;
+    panel.flash = 0.3; panel.flashColor = "#3ad07e"; SFX.correct();
+    st.correct++; st.streak++; if (st.streak > st.bestStreak) st.bestStreak = st.streak;
+    const dtSec = (performance.now() - (panel.qShownAt || performance.now())) / 1000;
+    if (dtSec < st.fastest) st.fastest = dtSec;
+    // 永久紀錄（跟勝場數一樣一直保留）
+    const rec = state.records;
+    if (st.streak > rec.bestStreak[side]) rec.bestStreak[side] = st.streak;
+    if (dtSec < rec.fastest[side]) rec.fastest[side] = dtSec;
+  } else {
+    st.wrong++; st.streak = 0;
+    panel.wrongStreak = (panel.wrongStreak || 0) + 1;
+    if (panel.wrongStreak >= CONFIG.WRONG_STREAK_LIMIT) { panel.cooldown = CONFIG.STREAK_COOLDOWN; panel.streakPenalty = true; panel.wrongStreak = 0; }
+    else { panel.cooldown = CONFIG.WRONG_COOLDOWN; panel.streakPenalty = false; }
+    panel.flash = 0.3; panel.flashColor = "#e0524d"; SFX.wrong();
+  }
+  nextQuestion(side);
+}
+function spawnArmy(side, tier, progOffset) {
+  const t = CONFIG.TIERS[tier] || CONFIG.TIERS[1];
+  const sp0 = layout.spawnProg ? layout.spawnProg[side] : (side === SIDE.LEFT ? 0 : 1);
+  const off = progOffset || 0;
+  const sp = side === SIDE.LEFT ? sp0 + off : sp0 - off; // 錯開，讓成隊士兵排成一列
+  state.battle.units.push({ side, tier, strength: t.strength, size: t.size, animT: Math.random(),
+    prog: sp, speed: CONFIG.UNIT_PROG_SPEED * t.speedMul, state: "walk", timer: 0, foe: null, dead: false });
+  const p = layout.path.posAt(sp); addEffect("fx_spawn", p[0], p[1]);
+}
+// 成隊出兵：一次出 count 個士兵，沿路徑錯開排成一列（大軍）
+function spawnSquad(side, tier, count) {
+  for (let i = 0; i < count; i++) spawnArmy(side, tier, i * 0.045);
+}
+function startAttack(u, targetSide) {
+  u.state = "attack"; u.timer = CONFIG.ATTACK_DURATION; u.foe = null;
+  damageCastle(targetSide, u.strength);
+  const ci = layout.castle[targetSide]; addEffect("fx_hit", ci.gateX, ci.baseY - ci.th * 0.25);
+}
+function addEffect(key, x, y) {
+  state.battle.effects.push({ key, x, y, t: 0, dur: 0.45 });
+  if (key === "fx_clash") SFX.clash(); else if (key === "fx_hit") SFX.hit();
+}
+
+function tryAction(side, kind) {
+  const b = state.battle, panel = b.panels[side], c = b.castles[side];
+  if (kind === "big") {
+    if (panel.coins >= CONFIG.BIG_ATTACK_COST) { panel.coins -= CONFIG.BIG_ATTACK_COST; spawnArmy(side, "boss");
+      panel.flash = 0.35; panel.flashColor = "#ffd34d"; SFX.big(); }
+  } else {
+    if (panel.coins >= CONFIG.HEAL_COST && c.hp < CONFIG.CASTLE_HP) { panel.coins -= CONFIG.HEAL_COST;
+      c.hp = Math.min(CONFIG.CASTLE_HP, c.hp + Math.max(1, Math.round(CONFIG.CASTLE_HP * 0.1)));
+      panel.flash = 0.35; panel.flashColor = "#46d07a"; SFX.heal(); }
+  }
+}
+function weightedPick(pool) { const tot = pool.reduce((s, p) => s + p.weight, 0); let r = Math.random() * tot;
+  for (const p of pool) { if ((r -= p.weight) <= 0) return p; } return pool[pool.length - 1]; }
+function pickPrize(side) {
+  const panel = state.battle.panels[side];
+  let p = weightedPick(PRIZES);
+  if (p.key === "boss" && panel.lastWasBoss) p = weightedPick(PRIZES.filter(x => x.key !== "boss"));
+  panel.lastWasBoss = (p.key === "boss"); return p;
+}
+function tryLottery(side) {
+  const panel = state.battle.panels[side];
+  if (panel.lottery || panel.coins < CONFIG.LOTTERY_COST) return;
+  panel.coins -= CONFIG.LOTTERY_COST;
+  panel.lottery = { t: 0, spinDur: 1.6, holdDur: 1.1, result: pickPrize(side), applied: false, shown: PRIZES[0].short, lastSwitch: 0 };
+  panel.flash = 0.3; panel.flashColor = "#ffd34d";
+}
+function applyPrize(side, prize) {
+  const panel = state.battle.panels[side], c = state.battle.castles[side];
+  switch (prize.key) {
+    case "coin":  panel.coins += 100; break;
+    case "unit1": spawnArmy(side, 1); break;
+    case "unit3": spawnArmy(side, 3); break;
+    case "heal":  c.hp = Math.min(CONFIG.CASTLE_HP, c.hp + 1); break;
+    case "boss":  spawnSquad(side, 1, 3); break; // 大軍：3 個小兵成隊，遇敵就少一個
+  }
+}
+function updateLottery(side, dt) {
+  const panel = state.battle.panels[side], lot = panel.lottery; if (!lot) return;
+  lot.t += dt;
+  if (lot.t < lot.spinDur) {
+    const interval = 0.04 + 0.20 * (lot.t / lot.spinDur);
+    if (lot.t - lot.lastSwitch >= interval) { lot.lastSwitch = lot.t; lot.shown = PRIZES[(Math.random() * PRIZES.length) | 0].short; SFX.tick(); }
+  } else if (!lot.applied) {
+    lot.applied = true; lot.shown = lot.result.short; applyPrize(side, lot.result);
+    if (lot.result.key === "boss") { SFX.jackpot(); triggerJackpotFx(); } else SFX.win();
+  } else if (lot.t >= lot.spinDur + lot.holdDur) { panel.lottery = null; }
+}
+
+function update(dt) {
+  if (state.screen !== "BATTLE") return;
+  const b = state.battle;
+  for (const side of [SIDE.LEFT, SIDE.RIGHT]) {
+    const p = b.panels[side];
+    if (p.cooldown > 0) p.cooldown = Math.max(0, p.cooldown - dt);
+    if (p.flash > 0)    p.flash = Math.max(0, p.flash - dt);
+    updateLottery(side, dt);
+  }
+  for (const u of b.units) { u.animT += dt; if (u.state === "walk") u.prog += (u.side === SIDE.LEFT ? 1 : -1) * u.speed * dt; }
+  // 對立單位靠近 → 進入交戰（雙方停下互打）
+  for (let i = 0; i < b.units.length; i++) {
+    const a = b.units[i]; if (a.state !== "walk" || a.side !== SIDE.LEFT) continue;
+    let best = null, bd = 1e9;
+    for (let j = 0; j < b.units.length; j++) {
+      const c = b.units[j]; if (c.state !== "walk" || c.side !== SIDE.RIGHT) continue;
+      const d = Math.abs(a.prog - c.prog); if (d <= CONFIG.ENGAGE_PROG && d < bd) { bd = d; best = c; }
+    }
+    if (best) {
+      a.state = "fight"; a.timer = CONFIG.FIGHT_DURATION; a.foe = best;
+      best.state = "fight"; best.timer = CONFIG.FIGHT_DURATION; best.foe = a;
+      const p = layout.path.posAt((a.prog + best.prog) / 2); addEffect("fx_clash", p[0], p[1]);
+    }
+  }
+  // 行走中單位抵達敵方城門 → 攻打城堡
+  for (const u of b.units) {
+    if (u.state !== "walk") continue;
+    const ux = layout.path.posAt(u.prog)[0];
+    if (u.side === SIDE.LEFT && ux >= layout.castle[SIDE.RIGHT].gateX) startAttack(u, SIDE.RIGHT);
+    else if (u.side === SIDE.RIGHT && ux <= layout.castle[SIDE.LEFT].gateX) startAttack(u, SIDE.LEFT);
+  }
+  // 狀態計時：交戰結算 / 攻擊完成 / 倒下移除
+  for (const u of b.units) {
+    if (u.state === "fight") {
+      u.timer -= dt;
+      if (u.timer <= 0) {
+        const foe = u.foe;
+        if (foe && foe.foe === u && foe.state === "fight") {
+          const dmg = Math.min(u.strength, foe.strength); u.strength -= dmg; foe.strength -= dmg;
+          for (const x of [u, foe]) {
+            if (x.strength <= 0) { x.state = "die"; x.timer = CONFIG.DIE_DURATION; x.foe = null; }
+            else { x.state = "walk"; x.foe = null; }
+          }
+          const p = layout.path.posAt((u.prog + foe.prog) / 2); addEffect("fx_clash", p[0], p[1]);
+        } else { u.state = "walk"; u.foe = null; }
+      }
+    } else if (u.state === "attack") { u.timer -= dt; if (u.timer <= 0) u.dead = true; }
+    else if (u.state === "die") { u.timer -= dt; if (u.timer <= 0) u.dead = true; }
+  }
+  b.units = b.units.filter(u => !u.dead);
+  for (const e of b.effects) e.t += dt;
+  b.effects = b.effects.filter(e => e.t < e.dur);
+}
+function damageCastle(side, amount) {
+  const c = state.battle.castles[side]; if (c.hp <= 0) return;
+  c.hp = Math.max(0, c.hp - amount);
+  if (c.hp === 0) { state.winner = side === SIDE.LEFT ? SIDE.RIGHT : SIDE.LEFT; state.wins[state.winner]++; state.screen = "RESULT"; SFX.win(); }
+}
+
+function wrapForFont(text, maxWidth) {
+  const lines = []; let line = "";
+  for (const ch of String(text).split("")) {
+    if (ch === "\n") { lines.push(line); line = ""; continue; }
+    if (ctx.measureText(line + ch).width > maxWidth && line) { lines.push(line); line = ch; } else line += ch;
+  }
+  lines.push(line); return lines;
+}
+function drawFitText(text, box, maxFont, minFont, color, weight) {
+  weight = weight || "bold";
+  for (let fs = maxFont; fs >= minFont; fs--) {
+    ctx.font = weight + " " + fs + "px sans-serif";
+    const lines = wrapForFont(text, box.w), lh = fs * 1.22;
+    if (lines.length * lh <= box.h || fs === minFont) {
+      ctx.fillStyle = color; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const startY = box.y + box.h / 2 - (lines.length - 1) * lh / 2;
+      lines.forEach((l, i) => ctx.fillText(l, box.x + box.w / 2, startY + i * lh));
+      ctx.textBaseline = "alphabetic"; return;
+    }
+  }
+}
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  if (state.screen === "MENU") drawMenu();
+  else { drawBattle(); if (state.screen === "RESULT") drawResult(); }
+  drawMuteButton();
+  if (_flashT > 0) drawJackpotFlash();
+}
+function drawMuteButton() {
+  const w = 96, h = 30, r = { x: W / 2 - w / 2, y: 8, w, h };
+  state.muteBtn = r;
+  ctx.fillStyle = "rgba(0,0,0,0.4)"; roundRect(r.x, r.y, r.w, r.h, 8); ctx.fill();
+  ctx.strokeStyle = "#ffffff66"; ctx.lineWidth = 1.5; roundRect(r.x, r.y, r.w, r.h, 8); ctx.stroke();
+  ctx.fillStyle = "#fff"; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(muted ? "♪ 聲音：關" : "♪ 聲音：開", r.x + r.w / 2, r.y + r.h / 2 + 1); ctx.textBaseline = "alphabetic";
+}
+function drawMenu() {
+  ctx.fillStyle = "#10162e"; ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = "center";
+  ctx.fillStyle = "#fff"; ctx.font = "bold " + Math.min(58, W * 0.078) + "px sans-serif";
+  ctx.fillText("紅藍大對抗", W / 2, H * 0.13);
+  ctx.fillStyle = "#ffd34d"; ctx.font = "bold " + Math.min(22, W * 0.028) + "px sans-serif";
+  ctx.fillText("答題塔防對戰", W / 2, H * 0.19);
+  ctx.fillStyle = "#ffffffaa"; ctx.font = Math.min(16, W * 0.021) + "px sans-serif";
+  ctx.fillText("答對出兵得金幣 · 攻破對方城堡獲勝 · 金幣：強攻擊500 / 抽獎250 / 修復100", W / 2, H * 0.235);
+  state.menuButtons = [];
+  const m = state.menu;
+  // 通用按鈕（固定大小，跟原本一樣）
+  const drawBtn = (r, label, sub, data) => {
+    Object.assign(r, data);
+    ctx.fillStyle = "#274080"; roundRect(r.x, r.y, r.w, r.h, 12); ctx.fill();
+    ctx.strokeStyle = "#ffffff88"; ctx.lineWidth = 2; roundRect(r.x, r.y, r.w, r.h, 12); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 26px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2 - (sub ? 10 : 0));
+    if (sub) { ctx.fillStyle = "#cfe0ff"; ctx.font = "15px sans-serif"; ctx.fillText(sub, r.x + r.w / 2, r.y + r.h / 2 + 18); }
+    ctx.textBaseline = "alphabetic"; state.menuButtons.push(r);
+  };
+  const crumbAndBack = (text, backTo) => {
+    ctx.fillStyle = "#cfe0ff"; ctx.font = "bold " + Math.min(23, W * 0.03) + "px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(text, W / 2, H * 0.30);
+    const rb = { x: Math.max(12, W * 0.04), y: H * 0.115, w: 96, h: 40, navBack: backTo };
+    ctx.fillStyle = "#1c2952"; roundRect(rb.x, rb.y, rb.w, rb.h, 10); ctx.fill();
+    ctx.strokeStyle = "#ffffff66"; ctx.lineWidth = 1.5; roundRect(rb.x, rb.y, rb.w, rb.h, 10); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 16px sans-serif"; ctx.textBaseline = "middle"; ctx.textAlign = "center";
+    ctx.fillText("← 返回", rb.x + rb.w / 2, rb.y + rb.h / 2); ctx.textBaseline = "alphabetic";
+    state.menuButtons.push(rb);
+  };
+  const subjects = subjectsWithBanks();
+  if (!subjects.length) {
+    ctx.fillStyle = "#ff9a9a"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("找不到題庫：請確認 questions-social.js 與本檔在同一資料夾", W / 2, H * 0.5);
+    return;
+  }
+  let rects = [];
+  if (m.level === "grade" && (!m.subject || !gradesForSubject(m.subject).length)) m.level = "subject";
+  if (m.level === "bank" && (!m.subject || !banksFor(m.subject, m.grade).length)) m.level = m.subject ? "grade" : "subject";
+  if (m.level === "subject") {
+    ctx.fillStyle = "#fff"; ctx.font = Math.min(24, W * 0.03) + "px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText("選擇科目", W / 2, H * 0.30);
+    rects = layoutMenuGrid(subjects.length, H * 0.36);
+    rects.forEach((r, i) => drawBtn(r, subjects[i], gradesForSubject(subjects[i]).length + " 個年級", { navSubject: subjects[i] }));
+  } else if (m.level === "grade") {
+    crumbAndBack(m.subject + " ＞ 選擇年級", "subject");
+    const grades = gradesForSubject(m.subject);
+    rects = layoutMenuGrid(grades.length, H * 0.36);
+    rects.forEach((r, i) => drawBtn(r, grades[i] + " 年級", banksFor(m.subject, grades[i]).length + " 個題庫", { navGrade: grades[i] }));
+  } else {
+    crumbAndBack(m.subject + " ＞ " + m.grade + " 年級 ＞ 選擇題庫", "grade");
+    const banks = banksFor(m.subject, m.grade);
+    rects = layoutMenuGrid(banks.length, H * 0.36);
+    rects.forEach((r, i) => drawBtn(r, banks[i].name, "共 " + banks[i].list.length + " 題", { bankKey: banks[i].key }));
+  }
+  // 底部：累計戰績 + 勝場歸零（依按鈕區底部往下排）
+  const gridBottom = rects.length ? rects[rects.length - 1].y + rects[rects.length - 1].h : H * 0.42;
+  let by = Math.min(Math.max(gridBottom + 44, H * 0.56), H - 150);
+  ctx.fillStyle = "#ffd34d"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "center";
+  ctx.fillText("累計戰績", W / 2, by);
+  drawWinTally(by + 50, Math.min(48, H * 0.075), Math.min(22, W * 0.028));
+  const rb = { x: W / 2 - 64, y: by + 96, w: 128, h: 36, reset: true };
+  ctx.fillStyle = "#3a2030"; roundRect(rb.x, rb.y, rb.w, rb.h, 8); ctx.fill();
+  ctx.strokeStyle = "#ffffff55"; ctx.lineWidth = 1.5; roundRect(rb.x, rb.y, rb.w, rb.h, 8); ctx.stroke();
+  ctx.fillStyle = "#ffd0d0"; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText("勝場歸零", rb.x + rb.w / 2, rb.y + rb.h / 2); ctx.textBaseline = "alphabetic";
+  state.menuButtons.push(rb);
+}
+
+function drawBattle() {
+  const b = state.battle, f = layout.field;
+  drawTerrain(f); if (!_imgCache["bg_field"]) drawRoad();
+  drawCastle(SIDE.LEFT); drawCastle(SIDE.RIGHT);
+  for (const u of b.units) drawUnit(u);
+  for (const e of b.effects) drawEffect(e);
+  drawPanel(SIDE.LEFT); drawPanel(SIDE.RIGHT);
+  drawScore();
+}
+function drawTerrain(f) {
+  if (_imgCache["bg_field"]) { ctx.drawImage(_imgCache["bg_field"], f.x, f.y, f.w, f.h); return; }
+  ctx.fillStyle = "#cfe6a8"; ctx.fillRect(0, 0, W, f.y + f.h);
+  ctx.fillStyle = "#bcdb90"; const step = Math.max(26, f.w * 0.03);
+  for (let i = 0; i < W; i += step) for (let j = 0; j < f.y + f.h; j += step) if (((i / step | 0) + (j / step | 0)) % 2 === 0) ctx.fillRect(i, j, step / 2, step / 2);
+  const rx = f.x + f.w * 0.47, rw = Math.max(40, f.w * 0.05);
+  ctx.fillStyle = "#7ec8e3"; ctx.beginPath(); ctx.moveTo(rx, f.y);
+  for (let y = f.y; y <= f.y + f.h; y += 18) ctx.lineTo(rx + Math.sin(y / 42) * 14, y);
+  for (let y = f.y + f.h; y >= f.y; y -= 18) ctx.lineTo(rx + rw + Math.sin(y / 42) * 14, y);
+  ctx.closePath(); ctx.fill();
+  for (const t of TREES_N) { const tx = f.x + t[0] * f.w, ty = f.y + t[1] * f.h;
+    ctx.fillStyle = "#6f4a28"; ctx.fillRect(tx - 3, ty, 5, 12);
+    ctx.fillStyle = "#5aa04a"; ctx.beginPath(); ctx.arc(tx, ty - 3, 12, 0, Math.PI * 2); ctx.fill(); }
+}
+function drawRoad() {
+  const samp = layout.path.samp, f = layout.field, roadW = Math.min(56, f.h * 0.20);
+  ctx.lineCap = "round"; ctx.lineJoin = "round";
+  ctx.strokeStyle = "#c9a36a"; ctx.lineWidth = roadW; ctx.beginPath(); ctx.moveTo(samp[0][0], samp[0][1]);
+  for (const p of samp) ctx.lineTo(p[0], p[1]); ctx.stroke();
+  ctx.strokeStyle = "#e4c690"; ctx.lineWidth = roadW * 0.72; ctx.beginPath(); ctx.moveTo(samp[0][0], samp[0][1]);
+  for (const p of samp) ctx.lineTo(p[0], p[1]); ctx.stroke();
+  const bp = layout.path.posAt(0.5), bw = roadW * 0.85;
+  ctx.fillStyle = "#9c6b3f"; ctx.fillRect(bp[0] - bw, bp[1] - bw * 0.7, bw * 2, bw * 1.4);
+  ctx.strokeStyle = "#6f4a28"; ctx.lineWidth = 2;
+  for (let k = -bw * 0.7; k <= bw * 0.7; k += 10) { ctx.beginPath(); ctx.moveTo(bp[0] - bw, bp[1] + k); ctx.lineTo(bp[0] + bw, bp[1] + k); ctx.stroke(); }
+}
+function drawCastle(side) {
+  const ci = layout.castle[side], c = state.battle.castles[side];
+  const ratio = c.hp / CONFIG.CASTLE_HP;
+  const base = side === SIDE.LEFT ? "castle_left" : "castle_right";
+  let key = base;
+  if (ratio < 0.6) key = base + "_corrupt";        // 低於 60%：破壞
+  else if (ratio < 0.8) key = base + "_dmg";        // 低於 80%：損壞
+  const img = _imgCache[key] || _imgCache[base];    // 對應圖未載入則退回完整圖
+  if (img) {
+    const tw = ci.th * img.width / img.height;
+    ctx.drawImage(img, ci.cx - tw / 2, ci.topY, tw, ci.th);
+  } else {
+    drawSprite(base, ci.cx, ci.baseY, 60, 84);
+  }
+  const bw = Math.max(104, ci.tw * 0.5), bh = 18, by = ci.topY - 26;
+  ctx.fillStyle = "#000"; ctx.fillRect(ci.cx - bw / 2, by, bw, bh);
+  ctx.fillStyle = "#3ad07e"; ctx.fillRect(ci.cx - bw / 2, by, bw * (c.hp / CONFIG.CASTLE_HP), bh);
+  ctx.strokeStyle = "#ffffffcc"; ctx.lineWidth = 1.5; ctx.strokeRect(ci.cx - bw / 2, by, bw, bh);
+  ctx.fillStyle = "#fff"; ctx.font = "bold 15px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillText(c.hp + " / " + CONFIG.CASTLE_HP, ci.cx, by + bh / 2 + 1); ctx.textBaseline = "alphabetic";
+}
+function drawUnit(u) {
+  const p = layout.path.posAt(u.prog);
+  const sheet = u.side === SIDE.LEFT ? "blue" : "red";
+  const targetH = u.tier === "boss" ? 88 : u.size * 1.65;
+  let row = ANIM.walk, frame;
+  if (u.state === "fight" || u.state === "attack") { row = ANIM.fight; frame = Math.floor(u.animT * 10) % 4; }
+  else if (u.state === "die") { row = ANIM.defeat; frame = Math.min(3, Math.floor((1 - u.timer / CONFIG.DIE_DURATION) * 4)); }
+  else { row = ANIM.walk; frame = Math.floor(u.animT * 8) % 4; }
+  if (_sheetCache[sheet]) {
+    drawSheetFrame(sheet, row, frame, p[0], p[1], targetH);
+  } else {
+    const key = (u.side === SIDE.LEFT ? "unitL_" : "unitR_") + u.tier;
+    const hh = u.tier === "boss" ? u.size * 1.3 : u.size; drawSprite(key, p[0], p[1], u.size, hh);
+  }
+}
+function drawEffect(e) {
+  const a = ASSETS[e.key] || { color: "#fff", label: "" }, pr = e.t / e.dur, size = 18 + pr * 26;
+  ctx.globalAlpha = (1 - pr) * 0.8; ctx.strokeStyle = a.color || "#fff"; ctx.lineWidth = 3;
+  ctx.strokeRect(e.x - size / 2, e.y - size / 2, size, size);
+  ctx.globalAlpha = 1;
+}
+function iconAttack(cx, cy, s, on) {
+  ctx.fillStyle = on ? "#e2e8f0" : "#8b9097";
+  ctx.beginPath(); ctx.moveTo(cx, cy - s * 0.55); ctx.lineTo(cx - s * 0.14, cy + s * 0.05); ctx.lineTo(cx + s * 0.14, cy + s * 0.05); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = on ? "#9a6a32" : "#5a5a5a"; ctx.fillRect(cx - s * 0.3, cy + s * 0.03, s * 0.6, s * 0.12);
+  ctx.fillStyle = on ? "#6f4a28" : "#4a4a4a"; ctx.fillRect(cx - s * 0.07, cy + s * 0.13, s * 0.14, s * 0.3);
+}
+function iconLottery(cx, cy, s, on) {
+  ctx.fillStyle = on ? "#d98cc0" : "#6b6f76"; ctx.fillRect(cx - s * 0.32, cy - s * 0.04, s * 0.64, s * 0.4);
+  ctx.fillStyle = on ? "#c46fae" : "#5a5a5a"; ctx.fillRect(cx - s * 0.38, cy - s * 0.2, s * 0.76, s * 0.18);
+  ctx.fillStyle = on ? "#ffe08a" : "#888"; ctx.fillRect(cx - s * 0.06, cy - s * 0.2, s * 0.12, s * 0.44);
+  ctx.beginPath(); ctx.arc(cx - s * 0.12, cy - s * 0.24, s * 0.1, 0, Math.PI * 2); ctx.arc(cx + s * 0.12, cy - s * 0.24, s * 0.1, 0, Math.PI * 2);
+  ctx.fillStyle = on ? "#ffe08a" : "#888"; ctx.fill();
+}
+function iconCoin(cx, cy, s, on) {
+  ctx.fillStyle = on === false ? "#9a8a3a" : "#f4c430"; ctx.beginPath(); ctx.arc(cx, cy, s * 0.46, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = "#b8860b"; ctx.lineWidth = Math.max(2, s * 0.06); ctx.beginPath(); ctx.arc(cx, cy, s * 0.46, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = "#8a5a00"; ctx.font = "bold " + (s * 0.5) + "px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText("金", cx, cy + s * 0.02); ctx.textBaseline = "alphabetic";
+}
+function iconRepair(cx, cy, s, on) {
+  ctx.fillStyle = on ? "#aeb8c4" : "#6b6f76"; ctx.fillRect(cx - s * 0.34, cy - s * 0.1, s * 0.68, s * 0.45);
+  for (let i = 0; i < 3; i++) ctx.fillRect(cx - s * 0.34 + i * s * 0.25, cy - s * 0.28, s * 0.16, s * 0.16);
+  ctx.fillStyle = on ? "#36c85f" : "#4f7a5d"; const t = s * 0.13, L = s * 0.36, oy = cy + s * 0.06;
+  ctx.fillRect(cx - t / 2, oy - L / 2, t, L); ctx.fillRect(cx - L / 2, oy - t / 2, L, t);
+}
+function drawFeatureCell(r, o) {
+  if (!r) return;
+  const img = _imgCache[o.imgKey], on = o.enabled !== false;
+  ctx.fillStyle = on ? (o.bg || "#23304d") : "#33343c"; roundRect(r.x, r.y, r.w, r.h, 9); ctx.fill();
+  ctx.strokeStyle = on ? "#ffffff77" : "#ffffff33"; ctx.lineWidth = 2; roundRect(r.x, r.y, r.w, r.h, 9); ctx.stroke();
+  const cx = r.x + r.w / 2, iconY = r.y + r.h * 0.31, s = Math.min(r.w, r.h) * 0.48;
+  if (img) ctx.drawImage(img, cx - s / 2, iconY - s / 2, s, s); else o.icon(cx, iconY, s, on);
+  ctx.textAlign = "center"; ctx.textBaseline = "alphabetic";
+  ctx.fillStyle = on ? "#fff" : "#ffffff66"; ctx.font = "bold " + Math.min(16, r.w * 0.15) + "px sans-serif";
+  ctx.fillText(o.name, cx, r.y + r.h * 0.74);
+  ctx.fillStyle = on ? (o.subColor || "#ffd34d") : "#ffffff55"; ctx.font = "bold " + Math.min(13, r.w * 0.12) + "px sans-serif";
+  ctx.fillText(o.sub, cx, r.y + r.h * 0.91);
+}
+function drawPanel(side) {
+  const p = layout.panels[side], panel = state.battle.panels[side];
+  if (panel.flash > 0) { ctx.fillStyle = panel.flashColor; ctx.globalAlpha = panel.flash * 0.5; ctx.fillRect(p.x, p.y, p.w, p.h); ctx.globalAlpha = 1; }
+  ctx.fillStyle = side === SIDE.LEFT ? "rgba(22,34,60,0.82)" : "rgba(60,26,26,0.82)";
+  ctx.fillRect(p.x, p.y, p.w, p.h);
+  ctx.strokeStyle = "rgba(255,255,255,0.18)"; ctx.lineWidth = 1; ctx.strokeRect(p.x, p.y, p.w, p.h);
+  const q = panel.question;
+  ctx.fillStyle = q.type === "tf" ? "#9fe0ff" : "#ffd9a3"; ctx.font = "bold 13px sans-serif"; ctx.textAlign = "left";
+  ctx.fillText(q.type === "tf" ? "是非題" : "選擇題", panel.qArea.x, panel.qArea.y - 2);
+  drawFitText(q.q, panel.qArea, Math.min(30, p.w * 0.05), 13, "#fff", "bold");
+  const opts = q.options, rects = panel.optionRects, n = opts.length;
+  for (let i = 0; i < rects.length; i++) {
+    const r = rects[i];
+    let fill = side === SIDE.LEFT ? "#274080" : "#7a2d2d";
+    if (q.type === "tf") fill = i === 0 ? "#2f6f47" : "#8a3a3a";
+    ctx.fillStyle = panel.cooldown > 0 ? "#3a3a44" : fill;
+    roundRect(r.x, r.y, r.w, r.h, 10); ctx.fill();
+    ctx.strokeStyle = "#ffffff55"; ctx.lineWidth = 2; roundRect(r.x, r.y, r.w, r.h, 10); ctx.stroke();
+    const prefix = n > 2 ? (String.fromCharCode(65 + i) + ". ") : "";
+    const inner = { x: r.x + 8, y: r.y + 6, w: r.w - 16, h: r.h - 12 };
+    drawFitText(prefix + opts[i], inner, n > 2 ? Math.min(23, r.h * 0.3) : Math.min(40, r.h * 0.4), 12, "#fff", "bold");
+  }
+  if (panel.cooldown > 0) {
+    const a = panel.optArea;
+    ctx.fillStyle = "rgba(10,12,20,0.55)"; ctx.fillRect(a.x, a.y, a.w, a.h);
+    ctx.fillStyle = "#ffb4b0"; ctx.font = "bold 20px sans-serif"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    const cdMsg = panel.streakPenalty ? "連錯三次！冷卻 " : "答錯！冷卻中 ";
+    ctx.fillText(cdMsg + panel.cooldown.toFixed(1) + "s", a.x + a.w / 2, a.y + a.h / 2); ctx.textBaseline = "alphabetic";
+  }
+  const canBig = panel.coins >= CONFIG.BIG_ATTACK_COST;
+  const canLot = panel.coins >= CONFIG.LOTTERY_COST && !panel.lottery;
+  const canHeal = panel.coins >= CONFIG.HEAL_COST && state.battle.castles[side].hp < CONFIG.CASTLE_HP;
+  drawFeatureCell(panel.btnBig,     { name: "強攻擊",  sub: String(CONFIG.BIG_ATTACK_COST), enabled: canBig,  bg: "#5a3d12", icon: iconAttack,  imgKey: "icon_attack" });
+  drawFeatureCell(panel.btnLottery, { name: "抽獎",    sub: String(CONFIG.LOTTERY_COST),    enabled: canLot,  bg: "#5a2f55", icon: iconLottery, imgKey: "icon_lottery" });
+  drawFeatureCell(panel.coinCell,   { name: "金幣",    sub: String(panel.coins),            enabled: true,    bg: "#3a3416", icon: iconCoin,    imgKey: "icon_coin", subColor: "#ffe08a" });
+  drawFeatureCell(panel.btnHeal,    { name: "修復城堡", sub: String(CONFIG.HEAL_COST),       enabled: canHeal, bg: "#15402a", icon: iconRepair,  imgKey: "icon_repair" });
+  if (panel.lottery) drawLotteryOverlay(side);
+}
+function drawLotteryOverlay(side) {
+  const p = layout.panels[side], lot = state.battle.panels[side].lottery;
+  ctx.fillStyle = "rgba(12,16,34,0.9)"; ctx.fillRect(p.x, p.y, p.w, p.h);
+  ctx.strokeStyle = "#ffd34d"; ctx.lineWidth = 3; ctx.strokeRect(p.x + 6, p.y + 6, p.w - 12, p.h - 12);
+  const spinning = lot.t < lot.spinDur;
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  ctx.fillStyle = "#ffd34d"; ctx.font = "bold " + Math.min(26, p.w * 0.055) + "px sans-serif";
+  ctx.fillText(spinning ? "抽獎中…" : "恭喜中獎！", p.x + p.w / 2, p.y + p.h * 0.27);
+  const bounce = spinning ? -Math.abs(Math.sin(lot.t * 16)) * 16 : 0;
+  let scale = 1; if (!spinning) { const k = Math.max(0, 1 - (lot.t - lot.spinDur) / 0.22); scale = 1 + 0.2 * k; }
+  ctx.font = "bold " + (Math.min(54, p.w * 0.15) * scale) + "px sans-serif";
+  ctx.fillStyle = spinning ? "#ffffff" : (lot.result.key === "boss" ? "#ffd36b" : "#7be0a0");
+  ctx.fillText(spinning ? lot.shown : lot.result.name, p.x + p.w / 2, p.y + p.h * 0.52 + bounce);
+  ctx.textBaseline = "alphabetic";
+}
+function drawScore() {
+  const s = state.battle.score;
+  ctx.fillStyle = "#1c2540"; ctx.font = "bold 18px sans-serif";
+  ctx.textAlign = "left";  ctx.fillText("答對：" + s[SIDE.LEFT], 14, 26);
+  ctx.textAlign = "center"; ctx.font = "bold 14px sans-serif"; ctx.fillText(state.battle.bankName || "", W / 2, H * 0.05 - 4);
+  ctx.font = "bold 18px sans-serif"; ctx.textAlign = "right"; ctx.fillText("答對：" + s[SIDE.RIGHT], W - 14, 26);
+}
+function drawResult() {
+  ctx.fillStyle = "rgba(0,0,0,0.7)"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#fff"; ctx.textAlign = "center"; ctx.font = "bold 54px sans-serif";
+  const who = state.winner === SIDE.LEFT ? "玩家 1（藍軍）" : "玩家 2（紅軍）";
+  ctx.fillText(who + " 獲勝！", W / 2, H * 0.15);
+  // ===== 本場戰報 =====
+  const st = state.battle.stats;
+  const fmtFast = v => (v && isFinite(v)) ? v.toFixed(1) + " 秒" : "—";
+  ctx.font = "bold 19px sans-serif"; ctx.fillStyle = "#ffd34d"; ctx.textAlign = "center";
+  ctx.fillText("本場戰報", W / 2, H * 0.205);
+  const colX = [W * 0.30, W * 0.70];
+  const heads = [["玩家1（藍軍）", "#9fd0ff"], ["玩家2（紅軍）", "#ff9a9a"]];
+  for (let i = 0; i < 2; i++) {
+    const x = colX[i], ss = st[i];
+    ctx.font = "bold 17px sans-serif"; ctx.fillStyle = heads[i][1];
+    ctx.fillText(heads[i][0], x, H * 0.245);
+    ctx.font = "15px sans-serif"; ctx.fillStyle = "#e8eefc";
+    ctx.fillText("答對 " + ss.correct + "　答錯 " + ss.wrong, x, H * 0.282);
+    ctx.fillText("最高連對 " + ss.bestStreak + " 題", x, H * 0.310);
+    ctx.fillText("最快答題 " + fmtFast(ss.fastest), x, H * 0.338);
+    ctx.font = "13px sans-serif"; ctx.fillStyle = "#ffd34d"; // 永久紀錄
+    ctx.fillText("★歷史 最快 " + fmtFast(state.records.fastest[i]) + " ｜ 連對 " + state.records.bestStreak[i] + " 題", x, H * 0.368);
+  }
+  ctx.font = "bold 20px sans-serif"; ctx.fillStyle = "#ffd34d"; ctx.textAlign = "center";
+  ctx.fillText("累計戰績", W / 2, H * 0.42);
+  drawWinTally(H * 0.47, Math.min(48, H * 0.072), Math.min(22, W * 0.028));
+  ctx.fillStyle = "#fff";
+  if (_sheetCache.blue || _sheetCache.red) {
+    // 兩軍固定各站自己那一側：藍軍在左、紅軍在右；只切換誰播放勝利/落敗動畫
+    const blueWon = state.winner === SIDE.LEFT;
+    const vf = Math.floor(gClock * 6) % 4;     // 勝利動畫
+    const lf = Math.floor(gClock * 3) % 2;     // 落敗只用踉蹌/跪倒兩幀(不縮成血塵)
+    const charH = Math.min(132, H * 0.215);    // 兩軍角色實高一致
+    const baseY = H * 0.75;                     // 共同地面線
+    drawCharFit("blue", blueWon ? ANIM.victory : ANIM.defeat, blueWon ? vf : lf, W * 0.34, baseY, charH, false); // 藍軍在左，面右
+    drawCharFit("red",  blueWon ? ANIM.defeat : ANIM.victory, blueWon ? lf : vf, W * 0.66, baseY, charH, true);  // 紅軍在右，面左
+    ctx.fillStyle = "#cfe0ff"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "center";
+    ctx.fillText(blueWon ? "勝利！" : "落敗", W * 0.34, baseY + 22);
+    ctx.fillText(blueWon ? "落敗" : "勝利！", W * 0.66, baseY + 22);
+  }
+  state.resultButtons = [];
+  const bw = Math.min(220, W * 0.32), bh = 58, gap = 28, y = H * 0.83;
+  const x1 = W / 2 - bw - gap / 2, x2 = W / 2 + gap / 2;
+  const mk = (x, label, action) => {
+    const r = { x, y, w: bw, h: bh, action };
+    ctx.fillStyle = "#274080"; roundRect(r.x, r.y, r.w, r.h, 12); ctx.fill();
+    ctx.strokeStyle = "#ffffff88"; ctx.lineWidth = 2; roundRect(r.x, r.y, r.w, r.h, 12); ctx.stroke();
+    ctx.fillStyle = "#fff"; ctx.font = "bold 24px sans-serif"; ctx.textBaseline = "middle";
+    ctx.fillText(label, r.x + r.w / 2, r.y + r.h / 2); ctx.textBaseline = "alphabetic"; state.resultButtons.push(r);
+  };
+  mk(x1, "再玩一次", () => startBattle(state.bankKey));
+  mk(x2, "回主選單", () => { state.screen = "MENU"; });
+}
+function roundRect(x, y, w, h, r) {
+  ctx.beginPath(); ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+}
+
+canvas.addEventListener("touchstart", (e) => { e.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  for (const t of e.changedTouches) handlePoint(t.clientX - rect.left, t.clientY - rect.top); }, { passive: false });
+canvas.addEventListener("mousedown", (e) => { const rect = canvas.getBoundingClientRect(); handlePoint(e.clientX - rect.left, e.clientY - rect.top); });
+window.addEventListener("resize", resize);
+
+let last = performance.now(), _lastScreen = null;
+function loop(now) {
+  const rdt = Math.min(0.05, (now - last) / 1000); last = now;
+  if (_slowmo > 0) _slowmo = Math.max(0, _slowmo - rdt);
+  if (_flashT > 0) _flashT = Math.max(0, _flashT - rdt);
+  const dt = _slowmo > 0 ? rdt * 0.3 : rdt;   // 慢動作期間整場放慢
+  gClock += dt; update(dt); draw();
+  if (state && state.screen !== _lastScreen) { _lastScreen = state.screen; syncMusic(); }
+  requestAnimationFrame(loop);
+}
+preloadAssets(); preloadSheets(); initMusic(); setupVolumeUI(); initState(); resize(); requestAnimationFrame(loop);
+</script>
+</body>
+</html>
