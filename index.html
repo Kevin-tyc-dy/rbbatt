@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>紅藍大對抗</title>
+<title>社會科答題塔防對戰</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #0c1020;
@@ -35,7 +35,7 @@
 <script src="questions-social.js"></script>
 <script src="questions-extra.js"></script>
 <script>
-/* 紅藍大對抗：金幣 / 強攻擊 / 抽獎 / 修復 / 音效 / 多科題庫 / 累計勝場(圖示) / 士兵動畫(去背+紅軍翻轉) */
+/* 社會科答題塔防對戰：金幣 / 強攻擊 / 抽獎 / 修復 / 音效 / 三組題庫 / 累計勝場(圖示) / 士兵動畫(去背+紅軍翻轉) */
 
 const ASSETS = {
   bg_field:     { src: "background.png", label: "", color: "" },
@@ -693,7 +693,7 @@ function drawMenu() {
     rects = layoutMenuGrid(banks.length, H * 0.36);
     rects.forEach((r, i) => drawBtn(r, banks[i].name, "共 " + banks[i].list.length + " 題", { bankKey: banks[i].key }));
   }
-  // 底部：累計戰績 + 勝場歸零（依按鈕區底部往下排）
+  // 底部：累計戰績 + 勝場歸零 + 說明（依按鈕區底部往下排）
   const gridBottom = rects.length ? rects[rects.length - 1].y + rects[rects.length - 1].h : H * 0.42;
   let by = Math.min(Math.max(gridBottom + 44, H * 0.56), H - 150);
   ctx.fillStyle = "#ffd34d"; ctx.font = "bold 18px sans-serif"; ctx.textAlign = "center";
