@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>紅藍大對抗 · 題庫管理</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="admin.js"></script>
+<script>
+/* 登入驗證：未登入則要求帳密，錯誤導回遊戲 */
+(function(){
+  if(sessionStorage.getItem("qbankAdmin")==="1") return;
+  var A=window.ADMIN||{};
+  var u=prompt("題庫管理 — 管理者帳號：");
+  if(u!==null){ var p=prompt("密碼："); if(u===A.user && p===A.pass){ sessionStorage.setItem("qbankAdmin","1"); return; } }
+  alert("帳號或密碼錯誤，將返回遊戲。");
+  location.href="index.html";
+})();
+</script>
+<script src="questions.js"></script>
+<style>
+  :root{ --bg:#0f1530; --panel:#172146; --panel2:#1d2a55; --line:#34406f; --txt:#e9eefc; --sub:#aab6e0; --gold:#ffd34d; --blue:#4d7cff; --red:#e0524d; --green:#37c06a; }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{ background:var(--bg); color:var(--txt); font-family:"PingFang TC","Microsoft JhengHei",system-ui,sans-serif; font-size:15px; }
+  header{ padding:14px 18px; background:linear-gradient(90deg,#1a2550,#22306a); border-bottom:1px solid var(--line); display:flex; flex-wrap:wrap; align-items:center; gap:10px; }
+  header h1{ font-size:20px; margin-right:8px; }
+  header h1 small{ font-size:13px; color:var(--sub); font-weight:normal; }
+  .btn{ background:var(--panel2); color:var(--txt); border:1px solid var(--line); border-radius:8px; padding:8px 12px; font-size:14px; cursor:pointer; font-family:inherit; }
+  .btn:hover{ background:#27376b; }
+  .btn.gold{ background:#5a4a12; border-color:#9a7a1f; color:#ffe9a8; }
+  .btn.blue{ background:#22397e; border-color:#3a5bb5; }
+  .btn.green{ background:#16502f; border-color:#2f9a5d; color:#bff0d0; }
+  .btn.red{ background:#5a2020; border-color:#a13c3c; color:#ffd0d0; }
+  .btn.sm{ padding:4px 8px; font-size:13px; border-radius:6px; }
+  .wrap{ display:flex; gap:0; height:calc(100vh - 60px); }
+  .side{ width:300px; min-width:240px; background:var(--panel); border-right:1px solid var(--line); overflow:auto; padding:10px; }
+  .main{ flex:1; overflow:auto; padding:16px 20px; }
+  .subj{ margin-bottom:6px; }
+  .subj > .hd{ font-weight:bold; color:var(--gold); padding:6px 4px; font-size:14px; }
+  .grade{ margin-left:8px; }
+  .grade > .hd{ color:var(--sub); padding:4px; font-size:13px; }
+  .bankitem{ margin-left:12px; padding:7px 9px; border-radius:7px; cursor:pointer; display:flex; justify-content:space-between; align-items:center; gap:6px; border:1px solid transparent; }
+  .bankitem:hover{ background:var(--panel2); }
+  .bankitem.active{ background:#27408b; border-color:#4d7cff; }
+  .bankitem .cnt{ color:var(--sub); font-size:12px; }
+  .empty{ color:var(--sub); padding:20px; text-align:center; line-height:1.8; }
+  .bankhead{ display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end; margin-bottom:14px; padding-bottom:14px; border-bottom:1px solid var(--line); }
+  .field{ display:flex; flex-direction:column; gap:4px; }
+  .field label{ font-size:12px; color:var(--sub); }
+  input,select,textarea{ background:#0e1430; color:var(--txt); border:1px solid var(--line); border-radius:7px; padding:7px 9px; font-size:14px; font-family:inherit; }
+  input:focus,select,textarea:focus{ outline:1px solid var(--blue); }
+  .q{ background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:12px; margin-bottom:12px; }
+  .qtop{ display:flex; gap:8px; align-items:center; margin-bottom:8px; }
+  .qtop .num{ color:var(--gold); font-weight:bold; min-width:28px; }
+  .qtop textarea{ flex:1; resize:vertical; min-height:38px; }
+  .opts{ display:grid; grid-template-columns:1fr 1fr; gap:8px; }
+  .opt{ display:flex; align-items:center; gap:7px; }
+  .opt .pick{ width:18px; height:18px; flex:none; }
+  .opt input[type=text]{ flex:1; }
+  .opt .lbl{ color:var(--sub); font-size:13px; width:18px; }
+  .tf .opts{ grid-template-columns:1fr 1fr; }
+  .hint{ color:var(--sub); font-size:13px; line-height:1.7; }
+  .bar{ display:flex; gap:8px; flex-wrap:wrap; align-items:center; margin:6px 0 16px; }
+  .pill{ background:#0e1430; border:1px solid var(--line); border-radius:20px; padding:3px 11px; font-size:12px; color:var(--sub); }
+  .warn{ color:#ffb4b0; }
+  .ok{ color:#9fe6b8; }
+  dialog{ background:var(--panel); color:var(--txt); border:1px solid var(--line); border-radius:12px; padding:18px; width:min(420px,92vw); }
+  dialog::backdrop{ background:rgba(0,0,0,.55); }
+  dialog h3{ margin-bottom:12px; }
+  dialog .field{ margin-bottom:10px; }
+  .row{ display:flex; gap:8px; justify-content:flex-end; margin-top:8px; }
+  a.hidden{ display:none; }
+  .subj > .hd, .grade > .hd{ display:flex; align-items:center; justify-content:space-between; gap:6px; }
+  .tg{ background:#243463; color:#cfe0ff; border:1px solid #3a5bb5; border-radius:6px; font-size:11px; padding:2px 8px; cursor:pointer; font-family:inherit; }
+  .tg:hover{ background:#2f4488; }
+  .bankitem .en{ display:flex; align-items:center; flex:none; }
+  .bankitem .en input{ width:16px; height:16px; cursor:pointer; }
+  .bankitem .nm{ flex:1; }
+  .bankitem.off .nm{ opacity:.45; text-decoration:line-through; }
+  .bankitem.off .cnt{ opacity:.45; }
+  .pill.off{ color:#ffb4b0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>題庫管理 <small>紅藍大對抗 · 自動載入 questions.js</small></h1>
+  <button class="btn" id="impMore">加入外部題庫(js)</button>
+  <button class="btn" id="impJs">改用外部 questions.js（取代）</button>
+  <button class="btn" id="impXls">匯入 Excel</button>
+  <button class="btn gold" id="tmpl">下載 Excel 空白範本</button>
+  <span style="flex:1"></span>
+  <button class="btn green" id="expJs">匯出 questions.js</button>
+  <button class="btn blue" id="expXls">匯出 Excel</button>
+  <input type="file" id="fileJs" accept=".js" class="hidden" style="display:none">
+  <input type="file" id="fileMore" accept=".js" multiple class="hidden" style="display:none">
+  <input type="file" id="fileXls" accept=".xlsx,.xls" class="hidden" style="display:none">
+  <a id="dl" class="hidden"></a>
+</header>
+
+<div class="wrap">
+  <div class="side">
+    <div class="bar" style="margin:4px 0 10px">
+      <button class="btn sm green" id="addBank">＋ 新增題庫</button>
+    </div>
+    <div class="hint" style="margin:0 0 8px">勾選框 ＝ 是否在遊戲顯示；科目／年級標題可一鍵全開・全關。</div>
+    <div id="tree"></div>
+  </div>
+  <div class="main" id="editor">
+    <div class="empty">
+      找不到題庫資料。<br>
+      本頁開啟時會自動載入同資料夾的 questions.js 直接編輯；<br>
+      若這裡是空白，請確認 questions.js 與本檔放在同一個資料夾。<br><br>
+      也可以按上方「加入外部題庫(js)」、「匯入 Excel」或「＋ 新增題庫」。<br><br>
+      <span class="hint">編輯完成後按「匯出 questions.js」，把下載的檔覆蓋資料夾裡的同名檔，重新整理遊戲即可生效。</span>
+    </div>
+  </div>
+</div>
+
+<dialog id="bankDlg">
+  <h3 id="bankDlgTitle">新增題庫</h3>
+  <div class="field"><label>科目</label>
+    <select id="bSubject"><option>國語</option><option>英語</option><option>數學</option><option>社會</option><option>自然</option><option>其他</option></select></div>
+  <div class="field"><label>年級</label><select id="bGrade"><option value="1">1 年級</option><option value="2">2 年級</option><option value="3" selected>3 年級</option><option value="4">4 年級</option><option value="5">5 年級</option><option value="6">6 年級</option><option value="0">不分年級</option></select></div>
+  <div class="field"><label>題庫名稱（例：題庫一）</label><input id="bName" type="text" placeholder="題庫一"></div>
+  <div class="row">
+    <button class="btn" id="bCancel">取消</button>
+    <button class="btn green" id="bOk">確定</button>
+  </div>
+</dialog>
+
+<script>
+const SUBJECTS = ["國語","英語","數學","社會","自然","其他"];
+let banks = [];           // {key,name,subject,grade,list:[{q,type,options[],answer}]}
+let sel = -1;             // selected bank index
+let dlgMode = "add";      // add | edit
+let uid = Date.now();
+
+function newKey(){ return "x_" + (uid++).toString(36); }
+function esc(s){ return String(s==null?"":s); }
+function gradeLabel(g){ return Number(g)===0 ? "不分年級" : (g + " 年級"); }
+function gnum(v){ if(v==null||v==="") return 3; const g=Number(v); return Number.isFinite(g)?g:3; }
+function gradeOptions(sel){ let h=""; for(let n=1;n<=6;n++) h+='<option value="'+n+'"'+(Number(sel)===n?' selected':'')+'>'+n+' 年級</option>'; h+='<option value="0"'+(Number(sel)===0?' selected':'')+'>不分年級</option>'; return h; }
+
+/* ---------- 解析 / 產生 questions.js ---------- */
+function banksFromRaw(raw){
+  return (raw||[]).map(b => ({
+    key: b.key || newKey(),
+    name: b.name || "題庫",
+    subject: b.subject || "社會",
+    grade: gnum(b.grade),
+    enabled: b.enabled !== false,
+    list: (b.list||[]).map(normQ)
+  }));
+}
+function parseExtraJs(text){
+  const win = { QUESTION_BANKS: [] };
+  // 在受控環境執行檔案內容（檔案會 push 進 window.QUESTION_BANKS）
+  new Function("window", text + "\n;return window;")(win);
+  return banksFromRaw(win.QUESTION_BANKS);
+}
+function normQ(q){
+  let opts = Array.isArray(q.options) ? q.options.slice() : [];
+  let type = q.type === "tf" ? "tf" : (q.type === "mc" ? "mc" : (opts.length<=2 && (opts[0]==="對"||opts.length===0) ? "tf":"mc"));
+  if(type==="tf") opts = ["對","錯"];
+  let a = Number(q.answer)||0;
+  return { q: esc(q.q), type, options: opts, answer: a };
+}
+function banksToExtraJs(list){
+  const header =
+`/* ============================================================
+   題庫資料庫（由「題庫編輯器」產生，可繼續用編輯器或手動修改）
+   欄位：key 唯一代號 / name 顯示名 / subject 科目 / grade 年級
+        enabled 是否在遊戲選單顯示（true 啟用 / false 停用） / list 題目
+   題目：q 題目, options 選項, answer 正解索引(0起算), type "tf"是非 / "mc"選擇
+   科目只能是 國語 數學 社會 自然 其他；沒有「啟用」題庫的科目/年級不會出現在選單。
+   ============================================================ */
+
+window.QUESTION_BANKS = window.QUESTION_BANKS || [];
+
+const EXTRA = [
+`;
+  let body = "";
+  for(const b of list){
+    body += `  {\n    key: ${JSON.stringify(b.key)},\n    name: ${JSON.stringify(b.name)},\n    subject: ${JSON.stringify(b.subject)},\n    grade: ${b.grade},\n    enabled: ${b.enabled !== false},\n    list: [\n`;
+    for(const q of b.list){
+      const opts = q.type==="tf" ? ["對","錯"] : q.options;
+      body += `      { q: ${JSON.stringify(q.q)}, options: ${JSON.stringify(opts)}, answer: ${q.answer}, type: ${JSON.stringify(q.type)} },\n`;
+    }
+    body += `    ],\n  },\n`;
+  }
+  const footer = `];\n\nwindow.QUESTION_BANKS.push(...EXTRA);\n`;
+  return header + body + footer;
+}
+
+/* ---------- Excel ---------- */
+const XLS_HEAD = ["科目","年級","題庫","啟用","題型","題目","選項1","選項2","選項3","選項4","正解"];
+function banksToRows(list){
+  const rows = [XLS_HEAD];
+  for(const b of list){
+    const en = b.enabled===false ? "否" : "是";
+    const gtxt = b.grade===0 ? "不分年級" : b.grade;
+    for(const q of b.list){
+      if(q.type==="tf"){
+        rows.push([b.subject,gtxt,b.name,en,"是非",q.q,"","","","", q.answer===0?"對":"錯"]);
+      }else{
+        const o=q.options;
+        rows.push([b.subject,gtxt,b.name,en,"選擇",q.q,o[0]||"",o[1]||"",o[2]||"",o[3]||"", (q.answer+1)]);
+      }
+    }
+  }
+  return rows;
+}
+function rowsToBanks(rows){
+  // rows: array of objects keyed by header
+  const map = new Map(); // subject|grade|name -> bank
+  for(const r of rows){
+    const subject = (r["科目"]||"").toString().trim();
+    const graw = (r["年級"]==null?"":String(r["年級"]).trim());
+    const grade = (/不分/.test(graw)||graw==="0") ? 0 : (Number(graw)||3);
+    const name = (r["題庫"]||"").toString().trim();
+    const q = (r["題目"]||"").toString().trim();
+    if(!subject || !name || !q) continue;
+    let typeRaw = (r["題型"]||"").toString().trim();
+    const o = [r["選項1"],r["選項2"],r["選項3"],r["選項4"]].map(x=> x==null?"":x.toString().trim());
+    let type = /是非|tf|^t$/i.test(typeRaw) ? "tf" : (/選擇|mc/i.test(typeRaw) ? "mc" : (o.filter(Boolean).length<=2 ? "tf":"mc"));
+    let ans = (r["正解"]==null?"":r["正解"].toString().trim());
+    let answer = 0, options;
+    if(type==="tf"){
+      options=["對","錯"];
+      answer = /^(錯|x|×|否|f|false|錯誤|n)$/i.test(ans) ? 1 : 0;
+    }else{
+      options = o.filter(Boolean);
+      if(/^[1-4]$/.test(ans)) answer = Number(ans)-1;
+      else { const i = options.indexOf(ans); answer = i>=0?i:0; }
+      if(answer>=options.length) answer=0;
+    }
+    const k = subject+"|"+grade+"|"+name;
+    if(!map.has(k)) map.set(k, {key:newKey(),name,subject,grade,enabled:true,list:[]});
+    const en=(r["啟用"]==null?"":r["啟用"].toString().trim());
+    if(/^(否|停用|false|n|x|×|關)$/i.test(en)) map.get(k).enabled=false;
+    map.get(k).list.push({q, type, options, answer});
+  }
+  return [...map.values()];
+}
+function importExcelFile(file){
+  const fr = new FileReader();
+  fr.onload = e=>{
+    try{
+      const wb = XLSX.read(e.target.result, {type:"array"});
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, {defval:""});
+      const got = rowsToBanks(rows);
+      if(!got.length){ alert("Excel 沒有讀到有效題目。請確認欄位名稱與內容（可先下載空白範本對照）。"); return; }
+      if(banks.length && !confirm("匯入會取代目前編輯中的所有題庫，確定嗎？")) return;
+      banks = got; sel = banks.length?0:-1; render();
+      alert("匯入成功！共 "+banks.length+" 組題庫、"+got.reduce((s,b)=>s+b.list.length,0)+" 題。");
+    }catch(err){ alert("讀取 Excel 失敗："+err.message); }
+  };
+  fr.readAsArrayBuffer(file);
+}
+function downloadTemplate(){
+  const rows = [XLS_HEAD,
+    ["社會",4,"題庫一","是","選擇","水上運輸專門用來運送貨物的是什麼？","渡輪","輪船","漁船","觀光遊艇",2],
+    ["社會",4,"題庫一","是","是非","目前臺灣已有高速鐵路。","","","","","對"],
+    ["數學",3,"題庫一","是","選擇","7 × 8 = ?","54","56","63","",2],
+    ["數學",3,"題庫一","是","是非","6 × 7 和 7 × 6 的答案一樣。","","","","","對"],
+    ["英語","不分年級","題庫一","是","選擇","「apple」的中文是什麼？","蘋果","香蕉","橘子","葡萄",1],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws["!cols"] = [{wch:8},{wch:6},{wch:12},{wch:6},{wch:8},{wch:46},{wch:14},{wch:14},{wch:14},{wch:14},{wch:8}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "題庫");
+  XLSX.writeFile(wb, "題庫範本.xlsx");
+}
+function exportExcel(){
+  if(!banks.length){ alert("目前沒有題庫可匯出。"); return; }
+  const ws = XLSX.utils.aoa_to_sheet(banksToRows(banks));
+  ws["!cols"] = [{wch:8},{wch:6},{wch:12},{wch:6},{wch:8},{wch:46},{wch:14},{wch:14},{wch:14},{wch:14},{wch:8}];
+  const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "題庫");
+  XLSX.writeFile(wb, "questions.xlsx");
+}
+function download(filename, text){
+  const blob = new Blob([text], {type:"text/javascript;charset=utf-8"});
+  const a = document.getElementById("dl");
+  a.href = URL.createObjectURL(blob); a.download = filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href), 4000);
+}
+
+/* ---------- 驗證 ---------- */
+function validate(){
+  const errs=[];
+  banks.forEach((b,bi)=>{
+    if(!SUBJECTS.includes(b.subject)) errs.push(`「${b.name}」科目「${b.subject}」不在 國語/數學/社會/自然/其他 之中`);
+    b.list.forEach((q,qi)=>{
+      if(!q.q.trim()) errs.push(`${b.subject}${b.grade}・${b.name} 第${qi+1}題：題目空白`);
+      if(q.type==="mc"){
+        const n=q.options.filter(x=>x&&x.trim()).length;
+        if(n<2) errs.push(`${b.subject}${b.grade}・${b.name} 第${qi+1}題：選擇題至少要 2 個選項`);
+        if(q.answer<0||q.answer>=n) errs.push(`${b.subject}${b.grade}・${b.name} 第${qi+1}題：尚未選正解`);
+      }
+    });
+  });
+  return errs;
+}
+
+/* ---------- 介面 ---------- */
+function render(){ renderTree(); renderEditor(); }
+
+function renderTree(){
+  const tree = document.getElementById("tree");
+  if(!banks.length){ tree.innerHTML = '<div class="hint" style="padding:10px">尚無題庫</div>'; return; }
+  // group
+  const bySub = {};
+  banks.forEach((b,i)=>{ (bySub[b.subject]=bySub[b.subject]||{})[b.grade]=(bySub[b.subject][b.grade]||[]); bySub[b.subject][b.grade].push(i); });
+  const allOn = idxs => idxs.length>0 && idxs.every(i=> banks[i].enabled!==false);
+  let html="";
+  for(const s of SUBJECTS){
+    if(!bySub[s]) continue;
+    const sIdx = Object.values(bySub[s]).flat();
+    html += `<div class="subj"><div class="hd"><span>${s}</span><button class="tg" data-subj="${s}">${allOn(sIdx)?'全部停用':'全部啟用'}</button></div>`;
+    const grades = Object.keys(bySub[s]).sort((a,b)=>a-b);
+    for(const g of grades){
+      const gIdx = bySub[s][g];
+      html += `<div class="grade"><div class="hd"><span>${gradeLabel(g)}</span><button class="tg" data-grade="${s}|${g}">${allOn(gIdx)?'停用':'啟用'}</button></div>`;
+      for(const i of gIdx){
+        const b=banks[i]; const off=b.enabled===false;
+        html += `<div class="bankitem ${i===sel?'active':''} ${off?'off':''}" data-i="${i}">
+          <label class="en" title="是否在遊戲顯示"><input type="checkbox" data-en="${i}" ${off?'':'checked'}></label>
+          <span class="nm">${b.name}</span><span class="cnt">${b.list.length} 題</span></div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  }
+  tree.innerHTML = html;
+  tree.querySelectorAll(".bankitem").forEach(el=> el.onclick=e=>{ if(e.target.closest("label,.tg"))return; sel=+el.dataset.i; render(); });
+  tree.querySelectorAll("[data-en]").forEach(cb=> cb.onclick=e=>{ e.stopPropagation(); banks[+cb.dataset.en].enabled=cb.checked; render(); });
+  tree.querySelectorAll("[data-subj]").forEach(btn=> btn.onclick=e=>{ e.stopPropagation(); const s=btn.dataset.subj; const idx=banks.map((b,i)=>b.subject===s?i:-1).filter(i=>i>=0); const on=idx.every(i=>banks[i].enabled!==false); idx.forEach(i=>banks[i].enabled=!on); render(); });
+  tree.querySelectorAll("[data-grade]").forEach(btn=> btn.onclick=e=>{ e.stopPropagation(); const p=btn.dataset.grade.split("|"); const idx=banks.map((b,i)=>(b.subject===p[0]&&String(b.grade)===p[1])?i:-1).filter(i=>i>=0); const on=idx.every(i=>banks[i].enabled!==false); idx.forEach(i=>banks[i].enabled=!on); render(); });
+}
+
+function renderEditor(){
+  const ed = document.getElementById("editor");
+  if(sel<0 || !banks[sel]){
+    if(banks.length){ ed.innerHTML = '<div class="empty">請從左側選一個題庫，或按「＋ 新增題庫」。</div>'; return; }
+    const cnt = (window.QUESTION_BANKS||[]).length;
+    ed.innerHTML = '<div class="empty">找不到題庫資料。<br>'+
+      (cnt>0 ? ('（已偵測到 '+cnt+' 組原始題庫，但未載入畫面，請按 Ctrl+F5 重新整理）')
+             : 'questions.js 尚未載入（0 組）。<br>請確認 questions.js 與本檔在「同一資料夾」，<br>並按 Ctrl+F5（或 Cmd+Shift+R）強制重新整理清除快取。')+
+      '<br><br><span class="hint">仍可按上方「加入外部題庫(js)」、「匯入 Excel」或「＋ 新增題庫」手動建立。</span></div>';
+    return;
+  }
+  const b = banks[sel];
+  const errs = validate();
+  let html = `
+    <div class="bankhead">
+      <div class="field"><label>科目</label><select id="eSubject">${SUBJECTS.map(s=>`<option ${s===b.subject?'selected':''}>${s}</option>`).join("")}</select></div>
+      <div class="field"><label>年級</label><select id="eGrade">${gradeOptions(b.grade)}</select></div>
+      <div class="field" style="flex:1; min-width:160px"><label>題庫名稱</label><input id="eName" type="text" value="${esc(b.name).replace(/"/g,'&quot;')}"></div>
+      <div class="field"><label>啟用</label><label style="display:flex;align-items:center;gap:6px;height:36px"><input type="checkbox" id="eEnabled" ${b.enabled!==false?'checked':''}> 顯示於遊戲</label></div>
+      <button class="btn red" id="delBank">刪除整個題庫</button>
+    </div>
+    <div class="bar">
+      <span class="pill">${b.subject} · ${gradeLabel(b.grade)} · ${b.list.length} 題</span>
+      ${b.enabled===false?'<span class="pill off">● 已停用（不會出現在遊戲）</span>':'<span class="pill ok">● 啟用中</span>'}
+      ${errs.length? `<span class="pill warn">⚠ 共 ${errs.length} 處待修正</span>` : `<span class="pill ok">✓ 無錯誤</span>`}
+      <span style="flex:1"></span>
+      <button class="btn sm green" id="addQ">＋ 新增題目</button>
+    </div>
+    <div id="qlist"></div>
+  `;
+  ed.innerHTML = html;
+  document.getElementById("eSubject").onchange=e=>{ b.subject=e.target.value; renderTree(); };
+  document.getElementById("eGrade").onchange=e=>{ b.grade=gnum(e.target.value); renderTree(); };
+  document.getElementById("eName").oninput=e=>{ b.name=e.target.value; renderTree(); };
+  document.getElementById("eEnabled").onchange=e=>{ b.enabled=e.target.checked; renderTree(); };
+  document.getElementById("delBank").onclick=()=>{ if(confirm(`確定刪除題庫「${b.name}」？此動作無法復原。`)){ banks.splice(sel,1); sel=banks.length?Math.min(sel,banks.length-1):-1; render(); } };
+  document.getElementById("addQ").onclick=()=>{ b.list.push({q:"",type:"mc",options:["","","",""],answer:0}); renderEditor(); };
+  renderQList(b);
+}
+
+function renderQList(b){
+  const box = document.getElementById("qlist");
+  box.innerHTML = "";
+  b.list.forEach((q,qi)=>{
+    const div = document.createElement("div");
+    div.className = "q" + (q.type==="tf"?" tf":"");
+    let optsHtml="";
+    if(q.type==="tf"){
+      optsHtml = ["對","錯"].map((t,i)=>`
+        <div class="opt"><input class="pick" type="radio" name="a${qi}" ${q.answer===i?'checked':''} data-ans="${i}"><span class="lbl">${t}</span></div>`).join("");
+    }else{
+      optsHtml = [0,1,2,3].map(i=>`
+        <div class="opt">
+          <input class="pick" type="radio" name="a${qi}" ${q.answer===i?'checked':''} data-ans="${i}">
+          <span class="lbl">${String.fromCharCode(65+i)}</span>
+          <input type="text" data-opt="${i}" value="${esc(q.options[i]||'').replace(/"/g,'&quot;')}" placeholder="選項${i+1}">
+        </div>`).join("");
+    }
+    div.innerHTML = `
+      <div class="qtop">
+        <span class="num">${qi+1}</span>
+        <select data-type><option value="mc" ${q.type==='mc'?'selected':''}>選擇題</option><option value="tf" ${q.type==='tf'?'selected':''}>是非題</option></select>
+        <textarea data-q placeholder="輸入題目…">${esc(q.q)}</textarea>
+        <button class="btn sm red" data-del>刪</button>
+      </div>
+      <div class="opts">${optsHtml}</div>
+      <div class="hint" style="margin-top:6px">${q.type==='tf'?'是非題：點圓點選擇正解（對／錯）。':'選擇題：填 2~4 個選項，點圓點選正解。'}</div>
+    `;
+    box.appendChild(div);
+    div.querySelector("[data-q]").oninput = e=>{ q.q=e.target.value; };
+    div.querySelector("[data-type]").onchange = e=>{ q.type=e.target.value; if(q.type==='tf'){q.options=["對","錯"]; if(q.answer>1)q.answer=0;} else if(q.options.length<4){q.options=[q.options[0]||"",q.options[1]||"",q.options[2]||"",q.options[3]||""];} renderEditor(); };
+    div.querySelector("[data-del]").onclick = ()=>{ if(confirm("刪除這一題？")){ b.list.splice(qi,1); renderEditor(); } };
+    div.querySelectorAll("[data-opt]").forEach(inp=> inp.oninput=e=>{ q.options[+e.target.dataset.opt]=e.target.value; });
+    div.querySelectorAll("[data-ans]").forEach(r=> r.onchange=e=>{ q.answer=+e.target.dataset.ans; });
+  });
+  if(!b.list.length) box.innerHTML='<div class="hint" style="padding:14px">這個題庫還沒有題目，按「＋ 新增題目」開始。</div>';
+}
+
+/* ---------- 對話框：新增題庫 ---------- */
+const dlg = document.getElementById("bankDlg");
+document.getElementById("addBank").onclick=()=>{ dlgMode="add"; document.getElementById("bankDlgTitle").textContent="新增題庫";
+  document.getElementById("bName").value=""; dlg.showModal(); };
+document.getElementById("bCancel").onclick=()=>dlg.close();
+document.getElementById("bOk").onclick=()=>{
+  const subject=document.getElementById("bSubject").value;
+  const grade=gnum(document.getElementById("bGrade").value);
+  const name=document.getElementById("bName").value.trim()||"題庫";
+  banks.push({key:newKey(),name,subject,grade,enabled:true,list:[]});
+  sel=banks.length-1; dlg.close(); render();
+};
+
+/* ---------- 按鈕 ---------- */
+document.getElementById("impJs").onclick=()=>document.getElementById("fileJs").click();
+document.getElementById("fileJs").onchange=e=>{ const f=e.target.files[0]; if(!f)return; const fr=new FileReader();
+  fr.onload=ev=>{ try{ const got=parseExtraJs(ev.target.result); if(banks.length && !confirm("這會用外部檔案『取代』目前所有題庫（若只想加入，請改用「加入外部題庫」）。確定取代？"))return; banks=got; sel=banks.length?0:-1; render(); alert("已載入外部 questions.js，共 "+banks.length+" 組題庫。"); }catch(err){ alert("解析失敗："+err.message); } };
+  fr.readAsText(f,"utf-8"); e.target.value=""; };
+document.getElementById("impMore").onclick=()=>document.getElementById("fileMore").click();
+document.getElementById("fileMore").onchange=e=>{
+  const files=[...e.target.files]; if(!files.length) return;
+  const existKeys=new Set(banks.map(b=>b.key)); let added=0, done=0;
+  files.forEach(f=>{ const fr=new FileReader();
+    fr.onload=ev=>{ try{ const got=parseExtraJs(ev.target.result);
+        got.forEach(b=>{ while(existKeys.has(b.key)) b.key=newKey(); existKeys.add(b.key); banks.push(b); added++; });
+      }catch(err){ alert("檔案 "+f.name+" 解析失敗："+err.message); }
+      if(++done===files.length){ sel=banks.length?banks.length-1:-1; render(); alert("已加入 "+added+" 組題庫（附加合併，不覆蓋原有題庫）。"); } };
+    fr.readAsText(f,"utf-8"); });
+  e.target.value="";
+};
+document.getElementById("impXls").onclick=()=>document.getElementById("fileXls").click();
+document.getElementById("fileXls").onchange=e=>{ const f=e.target.files[0]; if(f) importExcelFile(f); e.target.value=""; };
+document.getElementById("tmpl").onclick=downloadTemplate;
+document.getElementById("expXls").onclick=exportExcel;
+document.getElementById("expJs").onclick=()=>{
+  if(!banks.length){ alert("目前沒有題庫可匯出。"); return; }
+  const errs=validate();
+  if(errs.length && !confirm("有 "+errs.length+" 處可能的問題（例如未選正解或選項不足）：\n\n"+errs.slice(0,8).join("\n")+(errs.length>8?"\n…":"")+"\n\n仍要匯出嗎？")) return;
+  download("questions.js", banksToExtraJs(banks));
+};
+
+// 開啟時自動載入同資料夾的 questions.js（由上方 <script src="questions.js"> 載入到 window.QUESTION_BANKS）
+function boot(){
+  if(!banks.length && window.QUESTION_BANKS && window.QUESTION_BANKS.length){
+    banks = banksFromRaw(window.QUESTION_BANKS);
+    sel = banks.length ? 0 : -1;
+  }
+  render();
+}
+boot();
+if(!banks.length) window.addEventListener("load", boot); // 保險：所有資源載入後再試一次
+</script>
+</body>
+</html>

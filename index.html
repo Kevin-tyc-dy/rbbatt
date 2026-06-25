@@ -20,6 +20,8 @@
   .volRow > label { width: 52px; font-size: 13px; }
   .volRow input[type=range] { flex: 1; accent-color: #ffd34d; cursor: pointer; }
   .volRow .val { width: 36px; text-align: right; font-size: 12px; color: #cfe0ff; }
+  #adminBtn { position: fixed; top: 8px; left: 8px; z-index: 10; background: rgba(0,0,0,0.45); border: 1px solid #ffffff55; color: #fff; border-radius: 8px; padding: 6px 11px; font-size: 14px; font-weight: bold; cursor: pointer; font-family: inherit; }
+  #adminBtn:hover { background: rgba(40,55,107,0.85); }
 </style>
 </head>
 <body>
@@ -32,8 +34,19 @@
     <div class="volRow"><label>勝利</label><input type="range" min="0" max="100" id="vol_win"><span class="val" id="val_win"></span></div>
   </div>
 </div>
-<script src="questions-social.js"></script>
-<script src="questions-extra.js"></script>
+<button id="adminBtn" title="題庫管理（需管理者登入）">⚙ 題庫管理</button>
+<script src="questions.js"></script>
+<script src="admin.js"></script>
+<script>
+/* 題庫管理入口：輸入帳密正確才進入 item_edit.html */
+document.getElementById("adminBtn").onclick = function(){
+  var A = window.ADMIN || {};
+  var u = prompt("管理者帳號："); if(u===null) return;
+  var p = prompt("密碼："); if(p===null) return;
+  if(u===A.user && p===A.pass){ sessionStorage.setItem("qbankAdmin","1"); location.href="item_edit.html"; }
+  else alert("帳號或密碼錯誤");
+};
+</script>
 <script>
 /* 社會科答題塔防對戰：金幣 / 強攻擊 / 抽獎 / 修復 / 音效 / 三組題庫 / 累計勝場(圖示) / 士兵動畫(去背+紅軍翻轉) */
 
@@ -350,9 +363,11 @@ function initState() {
 // 題庫正規化：未標 subject/grade 的舊題庫一律歸到「社會 三年級」
 function getBanks() {
   const raw = window.QUESTION_BANKS || [];
-  return raw.map(b => ({ ...b, subject: b.subject || "社會", grade: b.grade || 3 }));
+  return raw.map(b => ({ ...b, subject: b.subject || "社會", grade: (b.grade == null ? 3 : Number(b.grade)) }))
+            .filter(b => b.enabled !== false); // 只顯示「啟用」的題庫
 }
-const SUBJECT_ORDER = ["國語", "數學", "社會", "自然", "其他"];
+const SUBJECT_ORDER = ["國語", "英語", "數學", "社會", "自然", "其他"];
+function gradeLabel(g){ return Number(g) === 0 ? "不分年級" : (g + " 年級"); }
 // 只回傳「有題庫」的科目（依固定順序）
 function subjectsWithBanks() {
   const have = new Set(getBanks().map(b => b.subject));
@@ -671,7 +686,7 @@ function drawMenu() {
   const subjects = subjectsWithBanks();
   if (!subjects.length) {
     ctx.fillStyle = "#ff9a9a"; ctx.font = "bold 22px sans-serif"; ctx.textAlign = "center";
-    ctx.fillText("找不到題庫：請確認 questions-social.js 與本檔在同一資料夾", W / 2, H * 0.5);
+    ctx.fillText("找不到題庫：請確認 questions.js 與本檔在同一資料夾，且至少有一組題庫為啟用", W / 2, H * 0.5);
     return;
   }
   let rects = [];
@@ -686,9 +701,9 @@ function drawMenu() {
     crumbAndBack(m.subject + " ＞ 選擇年級", "subject");
     const grades = gradesForSubject(m.subject);
     rects = layoutMenuGrid(grades.length, H * 0.36);
-    rects.forEach((r, i) => drawBtn(r, grades[i] + " 年級", banksFor(m.subject, grades[i]).length + " 個題庫", { navGrade: grades[i] }));
+    rects.forEach((r, i) => drawBtn(r, gradeLabel(grades[i]), banksFor(m.subject, grades[i]).length + " 個題庫", { navGrade: grades[i] }));
   } else {
-    crumbAndBack(m.subject + " ＞ " + m.grade + " 年級 ＞ 選擇題庫", "grade");
+    crumbAndBack(m.subject + " ＞ " + gradeLabel(m.grade) + " ＞ 選擇題庫", "grade");
     const banks = banksFor(m.subject, m.grade);
     rects = layoutMenuGrid(banks.length, H * 0.36);
     rects.forEach((r, i) => drawBtn(r, banks[i].name, "共 " + banks[i].list.length + " 題", { bankKey: banks[i].key }));
