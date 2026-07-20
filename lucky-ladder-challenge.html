@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>幸運天梯大挑戰 — 分組鬼腳圖</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --sky-top:#9B7BE0; --sky-mid:#7FB8F0; --sky-bot:#A8E6A1;
+    --panel:#FFFDF6; --ink:#2C2C44; --ink-soft:#5b5b78;
+    --wood:#C8924A; --wood-edge:#9A6A2E; --rope:#6E5A8C; --gold:#FFC93C;
+    --shadow:0 6px 0 rgba(0,0,0,.18);
+    --t-quiz:#4D96FF;--t-good:#5CC56B;--t-bad:#FF7A8A;
+    --display:'Fredoka',"Noto Sans TC","Microsoft JhengHei","PingFang TC",system-ui,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;margin:0;}
+  body{font-family:var(--display);color:var(--ink);overflow:hidden;user-select:none;-webkit-user-select:none;
+    background:linear-gradient(180deg,var(--sky-top) 0%,var(--sky-mid) 42%,#BFE9C0 78%,var(--sky-bot) 100%);}
+  button{font-family:inherit;cursor:pointer;border:none;}
+  .hidden{display:none !important;}
+
+  .btn{font-weight:700;color:#fff;border-radius:18px;padding:14px 24px;font-size:1.2rem;
+    background:var(--t-quiz);box-shadow:0 6px 0 #2c6fd6,var(--shadow);transition:transform .08s,box-shadow .08s;letter-spacing:.5px;}
+  .btn:active{transform:translateY(4px);box-shadow:0 2px 0 #2c6fd6;}
+  .btn.green{background:var(--t-good);box-shadow:0 6px 0 #3f9e4f,var(--shadow);}
+  .btn.green:active{box-shadow:0 2px 0 #3f9e4f;}
+  .btn.gold{background:var(--gold);color:#5a3d00;box-shadow:0 6px 0 #d99e1f,var(--shadow);}
+  .btn.gold:active{box-shadow:0 2px 0 #d99e1f;}
+  .btn.ghost{background:#fff;color:var(--ink);box-shadow:0 6px 0 #d9d4c2,var(--shadow);}
+  .btn.ghost:active{box-shadow:0 2px 0 #d9d4c2;}
+  .btn:disabled{opacity:.45;}
+  .btn:focus-visible{outline:4px solid #ff7a8a;outline-offset:3px;}
+
+  /* SETUP */
+  #setup{height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:20px;overflow:auto;}
+  .title{font-size:clamp(2.2rem,6.5vw,4.2rem);font-weight:700;color:#fff;margin:0;text-align:center;
+    text-shadow:0 4px 0 #6E5A8C,0 7px 14px rgba(0,0,0,.25);}
+  .sub{font-size:1.1rem;background:rgba(255,255,255,.72);padding:6px 18px;border-radius:99px;margin-top:-4px;text-align:center;}
+  .card-box{background:var(--panel);border-radius:26px;padding:22px 24px;box-shadow:0 10px 0 rgba(0,0,0,.12);max-width:880px;width:100%;}
+  .row{display:flex;align-items:center;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;}
+  .lab{font-weight:700;font-size:1.15rem;}
+  .count-btn{width:52px;height:52px;border-radius:50%;font-size:1.5rem;font-weight:700;color:#fff;background:var(--t-quiz);box-shadow:0 4px 0 #2c6fd6;}
+  .count-btn:active{transform:translateY(2px);box-shadow:0 2px 0 #2c6fd6;}
+  #teamCount{font-size:2rem;font-weight:700;min-width:46px;text-align:center;}
+  .team-edit{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;}
+  .team-chip{background:#fff;border-radius:18px;padding:9px 11px;display:flex;align-items:center;gap:8px;box-shadow:0 4px 0 rgba(0,0,0,.1);border:3px solid var(--c);}
+  .team-chip .avatar{font-size:1.8rem;cursor:pointer;line-height:1;}
+  .team-chip input{font-family:inherit;font-weight:700;font-size:1rem;border:none;outline:none;width:92px;background:#f6f4ea;border-radius:10px;padding:6px 8px;color:var(--ink);text-align:center;}
+  .opt-row{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;align-items:center;font-size:1rem;}
+  .toggle{display:flex;align-items:center;gap:8px;background:#fff;padding:8px 14px;border-radius:99px;box-shadow:0 4px 0 rgba(0,0,0,.08);font-weight:600;}
+  .toggle input{width:22px;height:22px;}
+
+  /* GAME */
+  #game{height:100%;display:flex;flex-direction:column;}
+  #topbar{display:flex;gap:10px;align-items:center;justify-content:center;flex-wrap:wrap;padding:8px 12px;}
+  #scoreboard{display:flex;gap:8px;flex-wrap:wrap;justify-content:center;}
+  .score{background:var(--panel);border-radius:14px;padding:6px 11px;display:flex;align-items:center;gap:7px;box-shadow:0 4px 0 rgba(0,0,0,.1);border:3px solid var(--c);transition:transform .2s;}
+  .score.active{transform:scale(1.09) translateY(-2px);box-shadow:0 6px 0 var(--c);}
+  .score .av{font-size:1.5rem;}
+  .score .nm{font-weight:700;font-size:.95rem;line-height:1.05;}
+  .score .st{font-size:.78rem;color:var(--ink-soft);}
+
+  #banner{font-size:1.15rem;font-weight:700;background:#fff;padding:8px 18px;border-radius:99px;box-shadow:0 4px 0 rgba(0,0,0,.1);border:4px solid var(--c,#4D96FF);text-align:center;}
+  #ladderWrap{flex:1;position:relative;min-height:0;}
+  svg#ladder{width:100%;height:100%;display:block;}
+  .target{cursor:pointer;}
+  .target:hover circle, .target:focus circle{fill:#FFE08A;}
+
+  /* OVERLAY */
+  #overlay{position:fixed;inset:0;z-index:50;background:rgba(35,25,60,.55);display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(2px);}
+  .modal{background:var(--panel);border-radius:28px;padding:24px 28px;max-width:680px;width:100%;box-shadow:0 14px 0 rgba(0,0,0,.25);text-align:center;animation:pop .3s cubic-bezier(.34,1.56,.64,1);}
+  @keyframes pop{from{transform:scale(.7);opacity:0}to{transform:scale(1);opacity:1}}
+  .modal .cat{display:inline-block;color:#fff;font-weight:700;padding:3px 14px;border-radius:99px;font-size:.95rem;margin-bottom:8px;}
+  .modal h2{font-size:1.5rem;margin:6px 0;}
+  .qtext{font-size:1.5rem;font-weight:700;margin:12px 0 18px;line-height:1.4;}
+  .answers{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  .ans{font-family:inherit;font-weight:700;font-size:1.2rem;padding:15px;border-radius:16px;background:#fff;color:var(--ink);box-shadow:0 5px 0 #d9d4c2;transition:transform .08s;border:3px solid #eee;}
+  .ans:active{transform:translateY(3px);box-shadow:0 2px 0 #d9d4c2;}
+  .ans.correct{background:var(--t-good);color:#fff;box-shadow:0 5px 0 #3f9e4f;}
+  .ans.wrong{background:var(--t-bad);color:#fff;box-shadow:0 5px 0 #d65566;}
+  .feedback{font-size:1.25rem;font-weight:700;margin-top:14px;min-height:1.3em;}
+
+  #toast{position:fixed;left:50%;bottom:90px;transform:translateX(-50%);z-index:55;background:var(--ink);color:#fff;
+    padding:12px 22px;border-radius:99px;font-weight:700;font-size:1.15rem;box-shadow:0 6px 14px rgba(0,0,0,.3);opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(-6px);}
+
+  .confetti{position:fixed;top:-20px;width:12px;height:18px;z-index:70;pointer-events:none;border-radius:2px;}
+  .results{display:flex;flex-direction:column;gap:9px;margin:14px 0;text-align:left;}
+  .rrow{display:flex;align-items:center;gap:10px;background:#fff;border-radius:14px;padding:10px 14px;box-shadow:0 3px 0 rgba(0,0,0,.08);border-left:8px solid var(--c);}
+  .rrow .ra{font-size:1.6rem;}
+  .rrow .rn{font-weight:700;}
+  .rrow .rp{margin-left:auto;font-weight:700;color:var(--ink-soft);text-align:right;}
+  .rrow.winner{background:linear-gradient(90deg,#FFF6D6,#FFFDF6);}
+  .rrow.winner .rp{color:#c98a00;}
+
+  /* editor */
+  .qlist{max-height:42vh;overflow:auto;margin:10px 0;display:flex;flex-direction:column;gap:8px;}
+  .qrow{background:#fff;border-radius:12px;padding:9px 12px;display:flex;gap:10px;align-items:center;box-shadow:0 3px 0 rgba(0,0,0,.08);font-size:.95rem;}
+  .qrow .qt{flex:1;font-weight:600;}
+  .qrow .del{background:var(--t-bad);color:#fff;border-radius:10px;padding:6px 12px;font-weight:700;}
+  .editform{display:grid;gap:8px;background:#fff;border-radius:14px;padding:12px;box-shadow:0 3px 0 rgba(0,0,0,.08);}
+  .editform input,.editform select{font-family:inherit;font-size:1rem;padding:9px 11px;border:2px solid #e3dfce;border-radius:10px;outline:none;}
+  .ef-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+
+  @media (prefers-reduced-motion: reduce){*{animation-duration:.001s !important;}}
+  @media (max-width:600px){.answers{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+
+<!-- ================= SETUP ================= -->
+<section id="setup">
+  <h1 class="title">🪜 幸運天梯大挑戰 ✨</h1>
+  <div class="sub">分組鬼腳圖 · 冠軍位置公開 · 答對放橫木、動腦規劃路線，搶下 🏆！</div>
+
+  <div class="card-box">
+    <div class="row">
+      <span class="lab">隊伍數量</span>
+      <button class="count-btn" id="minusTeam" aria-label="減少隊伍">−</button>
+      <span id="teamCount">4</span>
+      <button class="count-btn" id="plusTeam" aria-label="增加隊伍">＋</button>
+    </div>
+    <div class="team-edit" id="teamEdit"></div>
+    <div style="text-align:center;color:var(--ink-soft);font-size:.9rem;margin-top:6px;">點動物頭像換造型，也能改隊名</div>
+  </div>
+
+  <div class="card-box" style="padding:16px 22px;">
+    <div class="opt-row">
+      <label class="toggle"><input type="checkbox" id="optQuiz" checked> 答題賺橫木 📚</label>
+      <label class="toggle"><input type="checkbox" id="optSound" checked> 音效 🔊</label>
+      <button class="btn ghost" id="editBtn" style="padding:10px 18px;font-size:1rem;">✏️ 編輯題庫</button>
+    </div>
+    <div style="text-align:center;color:var(--ink-soft);font-size:.88rem;margin-top:8px;">關掉「答題賺橫木」＝純鬼腳圖抽籤，秒決定誰中獎</div>
+  </div>
+
+  <button class="btn green" id="startBtn" style="font-size:1.7rem;padding:18px 50px;">🚀 進入天梯</button>
+</section>
+
+<!-- ================= GAME ================= -->
+<section id="game" class="hidden">
+  <div id="topbar">
+    <div id="scoreboard"></div>
+    <span id="banner">選擇起點</span>
+    <button class="btn gold" id="revealBtn" style="padding:11px 18px;font-size:1.05rem;">🏁 開始往上走</button>
+    <button class="btn ghost" id="quitBtn" style="padding:11px 16px;font-size:.95rem;">結束</button>
+  </div>
+  <div id="ladderWrap"><svg id="ladder" preserveAspectRatio="xMidYMid meet"></svg></div>
+</section>
+
+<!-- ================= OVERLAYS ================= -->
+<div id="overlay" class="hidden"></div>
+<div id="toast"></div>
+
+<script>
+/* ===================== 資料 ===================== */
+const SVGNS="http://www.w3.org/2000/svg";
+const AVATARS=["🦁","🐯","🐻","🐼","🦊","🐸","🐲","🦄","🐵","🐰","🐧","🦉"];
+const TEAM_COLORS=["#FF5A5F","#FFA62B","#FFD23F","#5CC56B","#4D96FF","#A66BFF"];
+const DEFAULT_NAMES=["紅隊","橘隊","黃隊","綠隊","藍隊","紫隊"];
+
+const PENALTIES=[
+  "對老師說：「老師辛苦了！」",
+  "表演一種動物的叫聲 🐔",
+  "帶全班做 5 下開合跳",
+  "大聲喊：「我們下次會更棒！」",
+  "講一個冷笑話 😆",
+  "幫忙把白板擦乾淨",
+  "唱一句最喜歡的歌 🎵",
+  "學一個卡通人物說話",
+];
+
+let QUESTIONS=[
+  {cat:"數學",q:"7 + 8 = ？",opts:["13","15","16"],a:1},
+  {cat:"數學",q:"9 × 3 = ？",opts:["18","24","27"],a:2},
+  {cat:"數學",q:"一打鉛筆有幾枝？",opts:["10 枝","12 枝","20 枝"],a:1},
+  {cat:"數學",q:"24 ÷ 4 = ？",opts:["4","6","8"],a:1},
+  {cat:"數學",q:"哪一個比較大？",opts:["1/2","1/4","一樣大"],a:0},
+  {cat:"數學",q:"一個星期有幾天？",opts:["5 天","6 天","7 天"],a:2},
+  {cat:"國語",q:"「日」加上「月」是哪個字？",opts:["明","曰","昌"],a:0},
+  {cat:"國語",q:"「打開」的相反詞是？",opts:["拿走","關上","放下"],a:1},
+  {cat:"國語",q:"成語「三心二意」是形容人？",opts:["很專心","很開心","拿不定主意"],a:2},
+  {cat:"國語",q:"一（　）小狗，括號填？",opts:["隻","條","顆"],a:0},
+  {cat:"自然",q:"蝴蝶小時候是什麼？",opts:["蝌蚪","毛毛蟲","蜜蜂"],a:1},
+  {cat:"自然",q:"青蛙小時候叫什麼？",opts:["蝌蚪","蠶寶寶","金魚"],a:0},
+  {cat:"自然",q:"植物行光合作用最需要什麼？",opts:["月光","陽光","燈泡"],a:1},
+  {cat:"自然",q:"我們呼吸需要哪種氣體？",opts:["二氧化碳","氧氣","氮氣"],a:1},
+  {cat:"自然",q:"太陽從哪個方向升起？",opts:["東方","西方","北方"],a:0},
+  {cat:"自然",q:"一年有幾個季節？",opts:["2 個","3 個","4 個"],a:2},
+  {cat:"常識",q:"紅綠燈紅燈亮時要？",opts:["快跑","停下來","慢走"],a:1},
+  {cat:"常識",q:"台灣最高的山是？",opts:["陽明山","玉山","阿里山"],a:1},
+  {cat:"常識",q:"火災時要打幾號電話？",opts:["110","112","119"],a:2},
+  {cat:"常識",q:"過馬路要走什麼？",opts:["斑馬線","紅磚道","草地"],a:0},
+  {cat:"常識",q:"一年有幾個月？",opts:["10 個","12 個","11 個"],a:1},
+  {cat:"腦筋急轉彎",q:"什麼東西越洗越髒？",opts:["毛巾","水","肥皂"],a:1},
+  {cat:"腦筋急轉彎",q:"什麼門永遠關不起來？",opts:["大門","房門","球門"],a:2},
+  {cat:"腦筋急轉彎",q:"哪一個月有 28 天？",opts:["只有二月","每個月都有","一月"],a:1},
+  {cat:"腦筋急轉彎",q:"什麼動物打死牠卻流你的血？",opts:["蚊子","老鼠","蛇"],a:0},
+];
+
+/* ===================== 幾何 ===================== */
+const VBW=1000, VBH=1280;
+const TOP_Y=200, BOT_Y=1140, MARGIN_X=120;
+const CARD_TOP=44, CARD_H=104, ARR_Y=176, PATH_TOP=180;   // 結果卡 / 到達頭像列 / 路徑頂點
+let N=4, L=13;                 // 隊數 / 橫木層數
+const yLevel=(l)=> (BOT_Y-50) - (l-1)*((BOT_Y-50 - (TOP_Y+50))/(L-1));
+const xFor=(c)=> N===1?VBW/2 : MARGIN_X + c*((VBW-2*MARGIN_X)/(N-1));
+const gapMidX=(g)=> (xFor(g)+xFor(g+1))/2;
+
+/* ===================== 狀態 ===================== */
+let teams=[], rungs=new Set(), rungOwner={}, winnerSlot=0, slotOutcome=[];
+let phase="setup", turn=0, claimOrder=0, placing=false, busy=false, candidate=null;
+let useQuiz=true, useSound=true, qPool=[];
+let teamCount=4;
+
+const $=s=>document.querySelector(s);
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const key=(l,g)=>l+","+g;
+const has=(l,g)=> g>=0 && g<=N-2 && rungs.has(key(l,g));
+function valid(l,g){return g>=0 && g<=N-2 && l>=1 && l<=L && !has(l,g) && !has(l,g-1) && !has(l,g+1);}
+
+/* ===================== 音效 ===================== */
+let AC=null;
+function ac(){if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)();}catch(e){}}return AC;}
+function beep(f,d=0.12,t="square",v=0.18,w=0){if(!useSound)return;const c=ac();if(!c)return;
+  const o=c.createOscillator(),g=c.createGain();o.type=t;o.frequency.value=f;o.connect(g);g.connect(c.destination);
+  const s=c.currentTime+w;g.gain.setValueAtTime(v,s);g.gain.exponentialRampToValueAtTime(0.0001,s+d);o.start(s);o.stop(s+d);}
+const S={
+  good:()=>[523,659,784,1046].forEach((f,i)=>beep(f,0.14,"triangle",0.2,i*0.09)),
+  bad:()=>{beep(200,0.18,"sawtooth",0.18);beep(150,0.22,"sawtooth",0.18,0.12);},
+  place:()=>beep(440,0.1,"square",0.16),
+  click:()=>beep(680,0.06,"sine",0.12),
+  climb:()=>beep(420,0.05,"sine",0.1),
+  win:()=>[523,659,784,1046,784,1046,1318].forEach((f,i)=>beep(f,0.18,"triangle",0.22,i*0.13)),
+};
+function toast(msg){const t=$("#toast");t.textContent=msg;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),1700);}
+
+/* ===================== SETUP ===================== */
+function renderTeamEdit(){
+  const wrap=$("#teamEdit");wrap.innerHTML="";
+  for(let i=0;i<teamCount;i++){
+    const t=teams[i]||(teams[i]={name:DEFAULT_NAMES[i],avatar:AVATARS[i],color:TEAM_COLORS[i]});
+    const chip=document.createElement("div");chip.className="team-chip";chip.style.setProperty("--c",t.color);
+    chip.innerHTML=`<span class="avatar" title="點我換造型">${t.avatar}</span><input value="${t.name}" maxlength="6">`;
+    chip.querySelector(".avatar").onclick=()=>{const idx=AVATARS.indexOf(t.avatar);t.avatar=AVATARS[(idx+1)%AVATARS.length];chip.querySelector(".avatar").textContent=t.avatar;beep(700,0.06,"sine",0.12);};
+    chip.querySelector("input").oninput=e=>t.name=e.target.value||DEFAULT_NAMES[i];
+    wrap.appendChild(chip);
+  }
+}
+$("#plusTeam").onclick=()=>{if(teamCount<6){teamCount++;$("#teamCount").textContent=teamCount;renderTeamEdit();beep(600,0.06);}};
+$("#minusTeam").onclick=()=>{if(teamCount>2){teamCount--;$("#teamCount").textContent=teamCount;renderTeamEdit();beep(400,0.06);}};
+$("#optSound").onchange=e=>useSound=e.target.checked;
+
+/* ===================== 開始 ===================== */
+$("#startBtn").onclick=()=>{
+  ac();
+  useQuiz=$("#optQuiz").checked; useSound=$("#optSound").checked;
+  N=teamCount; L= N<=3?11:(N<=5?13:15);
+  teams=teams.slice(0,N).map((t,i)=>({...t,name:t.name||DEFAULT_NAMES[i],start:null,lines:0,end:null}));
+  rungs=new Set(); rungOwner={}; qPool=[];
+  // 隨機種子橫木：純抽籤模式放多一點，答題模式放少一點當底
+  const seed = useQuiz ? N : N*2+2;
+  for(let i=0;i<seed;i++) addRandomRung(-1);
+  // 決定中獎欄位與處罰
+  winnerSlot=Math.floor(Math.random()*N);
+  const pen=[...PENALTIES].sort(()=>Math.random()-0.5);
+  slotOutcome=[]; let pi=0;
+  for(let s=0;s<N;s++) slotOutcome[s]= s===winnerSlot ? {win:true} : {win:false,text:pen[pi++%pen.length]};
+  turn=0; claimOrder=0; placing=false; busy=false;
+  phase="claim";
+  $("#setup").classList.add("hidden"); $("#game").classList.remove("hidden");
+  $("#revealBtn").classList.add("hidden");
+  renderScore(); drawLadder(); updateBanner();
+};
+
+function addRandomRung(owner){
+  const slots=[];
+  for(let l=1;l<=L;l++) for(let g=0;g<=N-2;g++) if(valid(l,g)) slots.push([l,g]);
+  if(!slots.length) return false;
+  const [l,g]=slots[Math.floor(Math.random()*slots.length)];
+  rungs.add(key(l,g)); rungOwner[key(l,g)]=owner; return true;
+}
+
+/* ===================== 畫天梯 ===================== */
+function E(tag,attrs={},...kids){const e=document.createElementNS(SVGNS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);
+  kids.forEach(c=>e.appendChild((typeof c==="string"||typeof c==="number")?document.createTextNode(String(c)):c));return e;}
+function drawLadder(){
+  const svg=$("#ladder"); svg.setAttribute("viewBox",`0 0 ${VBW} ${VBH}`); svg.innerHTML="";
+  const planning=(phase==="claim"||phase==="quiz"||phase==="ready");
+  // 每隊目前實際會抵達的頂端格（鬼腳圖是雙射，每格最多一隊）
+  const ends = teams.map(t=> t.start==null?null:tracePath(t.start).end);
+
+  // 山頂標題
+  svg.appendChild(E("text",{x:VBW/2,y:30,"text-anchor":"middle","font-size":"30",fill:"#fff"},"⛰️ 山頂 · 目標是 🏆 ⛰️"));
+  // 直繩
+  for(let c=0;c<N;c++){
+    svg.appendChild(E("line",{x1:xFor(c),y1:TOP_Y,x2:xFor(c),y2:BOT_Y,stroke:"var(--rope)","stroke-width":"9","stroke-linecap":"round","stroke-dasharray":"2 16","opacity":".9"}));
+  }
+  // 頂端結果卡（事先公開：冠軍直接顯示 🏆）
+  for(let s=0;s<N;s++){
+    const x=xFor(s), oc=slotOutcome[s];
+    if(oc.win){
+      svg.appendChild(E("rect",{x:x-58,y:CARD_TOP,width:116,height:CARD_H,rx:18,fill:"#FFF6D6",stroke:"var(--gold)","stroke-width":"6"}));
+      svg.appendChild(E("text",{x,y:CARD_TOP+58,"text-anchor":"middle","font-size":"50"},"🏆"));
+      svg.appendChild(E("text",{x,y:CARD_TOP+90,"text-anchor":"middle","font-size":"17",fill:"#c98a00","font-weight":"700"},"冠軍寶座"));
+    }else{
+      svg.appendChild(E("rect",{x:x-58,y:CARD_TOP,width:116,height:CARD_H,rx:18,fill:"#FFFDF6",stroke:"var(--wood-edge)","stroke-width":"5"}));
+      svg.appendChild(E("text",{x,y:CARD_TOP+50,"text-anchor":"middle","font-size":"34"},"😜"));
+      svg.appendChild(E("text",{x,y:CARD_TOP+86,"text-anchor":"middle","font-size":"16",fill:"var(--ink-soft)"},"小處罰"));
+    }
+    // 目前會抵達這一格的隊伍（鬼腳圖是雙射，每格最多一隊）
+    if(planning){
+      const who=ends.findIndex(e=>e===s);
+      if(who>=0){
+        svg.appendChild(E("circle",{cx:x,cy:ARR_Y,r:22,fill:teams[who].color,stroke:"#fff","stroke-width":"3",opacity:".97"}));
+        svg.appendChild(E("text",{x,y:ARR_Y+8,"text-anchor":"middle","font-size":"24"},teams[who].avatar));
+      }
+    }
+  }
+  // 橫木
+  rungs.forEach(k=>{
+    const [l,g]=k.split(",").map(Number);
+    const y=yLevel(l), x1=xFor(g), x2=xFor(g+1);
+    svg.appendChild(E("line",{x1,y1:y,x2:x2,y2:y,stroke:"var(--wood)","stroke-width":"15","stroke-linecap":"round"}));
+    const owner=rungOwner[k];
+    if(owner>=0&&teams[owner]) svg.appendChild(E("circle",{cx:(x1+x2)/2,cy:y,r:8,fill:teams[owner].color,stroke:"#fff","stroke-width":"2"}));
+  });
+  // 放橫木：只顯示可放位置，學生自己思考後點一下直接放下（不可反悔）
+  if(placing){
+    const t=teams[turn];
+    for(const [l,g] of validSlots()){
+      const tg=E("g",{class:"target",tabindex:"0",role:"button"});
+      tg.appendChild(E("circle",{cx:gapMidX(g),cy:yLevel(l),r:20,fill:"#fff",stroke:t.color,"stroke-width":"4",opacity:".92"}));
+      tg.appendChild(E("text",{x:gapMidX(g),y:yLevel(l)+9,"text-anchor":"middle","font-size":"26",fill:t.color},"＋"));
+      tg.onclick=()=>commitRung(l,g);
+      tg.onkeydown=e=>{if(e.key==="Enter"||e.key===" ")commitRung(l,g);};
+      svg.appendChild(tg);
+    }
+  }
+  // 底部起點 + 棋子
+  for(let c=0;c<N;c++){
+    const x=xFor(c);
+    // 起點圓盤
+    const claimedBy=teams.findIndex(t=>t.start===c);
+    if(phase==="claim"&&claimedBy<0){
+      const tg=E("g",{class:"target",tabindex:"0",role:"button"});
+      tg.appendChild(E("circle",{cx:x,cy:BOT_Y+44,r:30,fill:"#fff",stroke:teams[claimOrder].color,"stroke-width":"5"}));
+      tg.appendChild(E("text",{x,y:BOT_Y+54,"text-anchor":"middle","font-size":"30",fill:teams[claimOrder].color},(c+1)));
+      tg.onclick=()=>claimColumn(c);
+      tg.onkeydown=e=>{if(e.key==="Enter"||e.key===" ")claimColumn(c);};
+      svg.appendChild(tg);
+    }else{
+      svg.appendChild(E("circle",{cx:x,cy:BOT_Y+44,r:26,fill:"#fff",stroke:"#cbb9e0","stroke-width":"4"}));
+      svg.appendChild(E("text",{x,y:BOT_Y+53,"text-anchor":"middle","font-size":"22",fill:"#9b86bd"},(c+1)));
+    }
+  }
+  // 已認領的隊伍棋子放底部
+  teams.forEach((t,i)=>{
+    if(t.start==null) return;
+    const x=xFor(t.start);
+    const g=E("g",{id:"tok"+i});
+    g.appendChild(E("circle",{cx:x,cy:BOT_Y+44,r:30,fill:t.color,stroke:"#fff","stroke-width":"4"}));
+    g.appendChild(E("text",{x,y:BOT_Y+55,"text-anchor":"middle","font-size":"34"},t.avatar));
+    svg.appendChild(g);
+  });
+}
+
+/* ===================== 認領起點 ===================== */
+function claimColumn(c){
+  if(teams.some(t=>t.start===c)) return;
+  S.click(); teams[claimOrder].start=c; claimOrder++;
+  if(claimOrder>=N){
+    phase = useQuiz ? "quiz" : "ready";
+    turn=0;
+    if(useQuiz){ $("#revealBtn").classList.remove("hidden"); drawLadder(); updateBanner(); setTimeout(askQuestion,500); }
+    else{ $("#revealBtn").classList.remove("hidden"); drawLadder(); updateBanner(); }
+  }else{ drawLadder(); updateBanner(); }
+  renderScore();
+}
+
+/* ===================== 答題 ===================== */
+function nextQuestion(){if(!qPool.length)qPool=[...QUESTIONS].sort(()=>Math.random()-0.5);return qPool.pop();}
+function askQuestion(){
+  if(phase!=="quiz"||busy) return;
+  const t=teams[turn], Q=nextQuestion();
+  if(!Q){ toast("題庫用完囉，按上方開始往上走！"); return; }
+  busy=true;
+  const ov=$("#overlay"); ov.classList.remove("hidden");
+  ov.innerHTML=`<div class="modal" style="border:6px solid ${t.color}">
+    <span class="cat" style="background:${t.color}">${Q.cat}</span>
+    <h2>${t.avatar} ${t.name} 答題</h2>
+    <div class="qtext">${Q.q}</div>
+    <div class="answers">${Q.opts.map((o,i)=>`<button class="ans" data-i="${i}">${o}</button>`).join("")}</div>
+    <div class="feedback" id="fb"></div></div>`;
+  beep(660,0.1,"sine",0.15);
+  ov.querySelectorAll(".ans").forEach(b=>b.onclick=async()=>{
+    const chosen=+b.dataset.i; ov.querySelectorAll(".ans").forEach(x=>x.disabled=true);
+    ov.querySelectorAll(".ans")[Q.a].classList.add("correct");
+    if(chosen===Q.a){
+      S.good(); $("#fb").textContent="答對了！可以放一條橫木 🪵"; $("#fb").style.color="#3f9e4f";
+      await sleep(1100); ov.classList.add("hidden"); busy=false;
+      startPlacing();
+    }else{
+      b.classList.add("wrong"); S.bad();
+      $("#fb").textContent="可惜答錯，換下一隊"; $("#fb").style.color="#d65566";
+      await sleep(1200); ov.classList.add("hidden"); busy=false;
+      nextTurn();
+    }
+  });
+}
+function startPlacing(){
+  placing=true; drawLadder();
+  showPlaceBanner(); ensureRandBtn();
+}
+function showPlaceBanner(){
+  const t=teams[turn];
+  $("#banner").style.setProperty("--c",t.color);
+  $("#banner").innerHTML=`🤔 ${t.avatar} <b>${t.name}</b>：自己想好要爬到 🏆，點一個 <b>＋</b> 放下（放下就定案）`;
+}
+function validSlots(){const s=[];for(let l=1;l<=L;l++)for(let g=0;g<=N-2;g++)if(valid(l,g))s.push([l,g]);return s;}
+function ensureRandBtn(){
+  if(document.getElementById("randBtn"))return;
+  const b=document.createElement("button"); b.id="randBtn"; b.className="btn ghost";
+  b.style.cssText="padding:11px 16px;font-size:.95rem;"; b.textContent="🎲 隨機放";
+  b.onclick=()=>{ if(!placing)return; const s=validSlots(); if(s.length){const[l,g]=s[Math.floor(Math.random()*s.length)]; commitRung(l,g);} };
+  $("#topbar").insertBefore(b,$("#quitBtn"));
+}
+function clearPlaceUI(){
+  const rb=document.getElementById("randBtn"); if(rb)rb.remove();
+}
+function commitRung(l,g){
+  if(!placing||!valid(l,g)) return;
+  rungs.add(key(l,g)); rungOwner[key(l,g)]=turn; teams[turn].lines++;
+  S.place(); placing=false; clearPlaceUI();
+  afterPlace();
+}
+function afterPlace(){ renderScore(); drawLadder(); nextTurn(); }
+function nextTurn(){
+  turn=(turn+1)%N; renderScore(); updateBanner();
+  if(phase==="quiz") setTimeout(askQuestion,450);
+}
+
+/* ===================== 計分板 / 提示 ===================== */
+function renderScore(){
+  const sb=$("#scoreboard"); sb.innerHTML="";
+  teams.forEach((t,i)=>{
+    const active=(phase==="claim"&&i===claimOrder)||((phase==="quiz")&&i===turn);
+    const d=document.createElement("div"); d.className="score"+(active?" active":""); d.style.setProperty("--c",t.color);
+    const sub = t.start==null?"未選起點":`第 ${t.start+1} 條 · 🪵${t.lines}`;
+    d.innerHTML=`<span class="av">${t.avatar}</span><span><span class="nm">${t.name}</span><br><span class="st">${sub}</span></span>`;
+    sb.appendChild(d);
+  });
+}
+function updateBanner(){
+  const b=$("#banner");
+  if(phase==="claim"){ b.style.setProperty("--c",teams[claimOrder].color); b.innerHTML=`${teams[claimOrder].avatar} ${teams[claimOrder].name}：選一條起繩 — 看看現在誰會通往 🏆`; }
+  else if(phase==="quiz"){ b.style.setProperty("--c",teams[turn].color); b.innerHTML=`輪到 ${teams[turn].avatar} <b>${teams[turn].name}</b> 答題（答對就能放橫木搶 🏆）`; }
+  else if(phase==="ready"){ b.style.setProperty("--c","#4D96FF"); b.innerHTML="各隊已就位！按 <b>🏁 開始往上走</b> 揭曉"; }
+}
+
+/* ===================== 揭曉：往上爬 ===================== */
+$("#revealBtn").onclick=startReveal;
+function tracePath(start, extra){
+  const hasX=(l,g)=> g>=0 && g<=N-2 && (rungs.has(key(l,g)) || (extra && extra.l===l && extra.g===g));
+  let col=start; const pts=[[xFor(col),BOT_Y]];
+  for(let l=1;l<=L;l++){
+    const left=hasX(l,col-1), right=hasX(l,col);
+    if(left||right){ const y=yLevel(l); pts.push([xFor(col),y]); col=left?col-1:col+1; pts.push([xFor(col),y]); }
+  }
+  pts.push([xFor(col),PATH_TOP]);
+  return {pts,end:col};
+}
+async function startReveal(){
+  if(phase==="reveal"||phase==="result") return;
+  if(phase==="claim"){ toast("先讓每一隊選好起點！"); return; }
+  phase="reveal"; placing=false; candidate=null; busy=true;
+  clearPlaceUI();
+  $("#revealBtn").disabled=true;
+  $("#overlay").classList.add("hidden");
+  $("#banner").innerHTML="🧗 出發！沿著繩子往上爬…";
+  drawLadder();
+  const svg=$("#ladder");
+  // 建路徑與棋子
+  const paths=[], toks=[];
+  teams.forEach((t,i)=>{
+    const tr=tracePath(t.start); t.end=tr.end;
+    const d="M "+tr.pts.map(p=>p[0]+" "+p[1]).join(" L ");
+    const path=E("path",{d,fill:"none",stroke:t.color,"stroke-width":"8","stroke-linecap":"round","stroke-linejoin":"round",opacity:".85"});
+    svg.appendChild(path);
+    const len=path.getTotalLength();
+    path.setAttribute("stroke-dasharray",len); path.setAttribute("stroke-dashoffset",len);
+    paths.push({path,len});
+    // 重新放棋子（移到最上層）
+    const tok=document.getElementById("tok"+i); if(tok)svg.appendChild(tok);
+    toks.push(tok);
+  });
+  // 動畫
+  const DUR=2600; const t0=performance.now();
+  let dinged=false;
+  await new Promise(res=>{
+    function frame(now){
+      let p=Math.min(1,(now-t0)/DUR);
+      const e=p<0.5?2*p*p:1-Math.pow(-2*p+2,2)/2; // easeInOut
+      paths.forEach((o,i)=>{
+        o.path.setAttribute("stroke-dashoffset", o.len*(1-e));
+        const pt=o.path.getPointAtLength(o.len*e);
+        const tok=toks[i]; if(tok)tok.setAttribute("transform",`translate(${pt.x-xFor(teams[i].start)},${pt.y-(BOT_Y+44)})`);
+      });
+      if(e>0.15&&Math.random()<0.25)S.climb();
+      if(e>0.9&&!dinged){ dinged=true; beep(1046,0.2,"triangle",0.2); }
+      if(p<1) requestAnimationFrame(frame); else res();
+    }
+    requestAnimationFrame(frame);
+  });
+  // 重畫一次讓路徑與棋子定格
+  redrawWithPaths();
+  await sleep(500);
+  showResult();
+}
+function redrawWithPaths(){
+  // 重畫底圖後補上路徑與棋子於最終位置
+  drawLadder();
+  const svg=$("#ladder");
+  teams.forEach((t,i)=>{
+    const tr=tracePath(t.start);
+    const d="M "+tr.pts.map(p=>p[0]+" "+p[1]).join(" L ");
+    svg.appendChild(E("path",{d,fill:"none",stroke:t.color,"stroke-width":"8","stroke-linecap":"round","stroke-linejoin":"round",opacity:".85"}));
+    const end=tr.pts[tr.pts.length-1];
+    const g=E("g",{}); g.appendChild(E("circle",{cx:end[0],cy:end[1],r:30,fill:t.color,stroke:"#fff","stroke-width":"4"}));
+    g.appendChild(E("text",{x:end[0],y:end[1]+11,"text-anchor":"middle","font-size":"34"},t.avatar));
+    svg.appendChild(g);
+  });
+}
+
+/* ===================== 結果 ===================== */
+function showResult(){
+  phase="result"; busy=false;
+  const winner=teams.find(t=>t.end===winnerSlot);
+  S.win(); confetti();
+  const sorted=[...teams].sort((a,b)=> (a.end===winnerSlot?-1:b.end===winnerSlot?1:0));
+  const rows=sorted.map(t=>{
+    const win=t.end===winnerSlot;
+    const right= win?'🏆 冠軍！':(slotOutcome[t.end].text||'小處罰');
+    return `<div class="rrow ${win?'winner':''}" style="--c:${t.color}">
+      <span class="ra">${t.avatar}</span><span class="rn">${t.name}</span><span class="rp">${right}</span></div>`;
+  }).join("");
+  const ov=$("#overlay"); ov.classList.remove("hidden");
+  ov.innerHTML=`<div class="modal">
+    <div style="font-size:3.4rem">👑</div>
+    <h2 style="font-size:1.8rem;color:#c98a00">${winner.avatar} ${winner.name} 登頂！</h2>
+    <div style="color:var(--ink-soft);margin-bottom:6px;">其他隊伍完成小任務就過關 🎈</div>
+    <div class="results">${rows}</div>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+      <button class="btn green" id="againBtn" style="font-size:1.3rem;">再玩一次</button>
+      <button class="btn ghost" id="closeRes" style="font-size:1.1rem;">看天梯</button></div></div>`;
+  $("#againBtn").onclick=resetToSetup;
+  $("#closeRes").onclick=()=>ov.classList.add("hidden");
+}
+function resetToSetup(){
+  $("#overlay").classList.add("hidden"); $("#game").classList.add("hidden"); $("#setup").classList.remove("hidden");
+  $("#revealBtn").disabled=false; phase="setup"; placing=false; candidate=null; clearPlaceUI();
+  teams.forEach(t=>{t.start=null;t.lines=0;t.end=null;});
+}
+$("#quitBtn").onclick=resetToSetup;
+
+/* ===================== 彩帶 ===================== */
+function confetti(){
+  if(window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const colors=TEAM_COLORS.concat(["#fff","#FFC93C"]);
+  for(let i=0;i<90;i++){
+    const c=document.createElement("div");c.className="confetti";
+    c.style.left=Math.random()*100+"vw";c.style.background=colors[i%colors.length];
+    c.style.transform=`rotate(${Math.random()*360}deg)`;document.body.appendChild(c);
+    const dur=2200+Math.random()*1800,drift=(Math.random()-0.5)*220;
+    c.animate([{transform:"translate(0,0)",opacity:1},{transform:`translate(${drift}px,105vh) rotate(${720+Math.random()*360}deg)`,opacity:.9}],
+      {duration:dur,easing:"cubic-bezier(.3,.6,.5,1)"}).onfinish=()=>c.remove();
+  }
+}
+
+/* ===================== 題庫編輯器 ===================== */
+$("#editBtn").onclick=openEditor;
+function openEditor(){
+  const ov=$("#overlay"); ov.classList.remove("hidden");
+  const cats=["數學","國語","自然","常識","腦筋急轉彎"];
+  ov.innerHTML=`<div class="modal" style="text-align:left;max-width:760px">
+    <h2 style="text-align:center">✏️ 編輯題庫 <span style="font-size:1rem;color:var(--ink-soft)">（共 <b id="qcount">${QUESTIONS.length}</b> 題）</span></h2>
+    <div class="qlist" id="qlist"></div>
+    <div class="editform">
+      <input id="nq" placeholder="輸入題目，例如：5 + 6 = ？">
+      <div class="ef-grid">
+        <input id="o0" placeholder="選項 A（正解）">
+        <input id="o1" placeholder="選項 B">
+        <input id="o2" placeholder="選項 C">
+        <select id="ncat">${cats.map(c=>`<option>${c}</option>`).join("")}</select>
+      </div>
+      <div style="font-size:.85rem;color:var(--ink-soft)">「選項 A」自動當正解，加入後會隨機打亂位置。</div>
+      <button class="btn green" id="addQ">➕ 加入題目</button>
+    </div>
+    <div style="text-align:center;margin-top:14px"><button class="btn" id="closeEd">完成</button></div></div>`;
+  drawQList();
+  $("#addQ").onclick=()=>{
+    const q=$("#nq").value.trim(),a=$("#o0").value.trim(),b=$("#o1").value.trim(),c=$("#o2").value.trim();
+    if(!q||!a||!b){$("#nq").focus();return;}
+    let opts=[a,b];if(c)opts.push(c);const correct=a;opts=opts.sort(()=>Math.random()-0.5);
+    QUESTIONS.push({cat:$("#ncat").value,q,opts,a:opts.indexOf(correct)});
+    $("#nq").value=$("#o0").value=$("#o1").value=$("#o2").value="";$("#qcount").textContent=QUESTIONS.length;drawQList();beep(700,0.08);
+  };
+  $("#closeEd").onclick=()=>{ov.classList.add("hidden");qPool=[];};
+}
+function drawQList(){
+  const list=$("#qlist");list.innerHTML="";
+  QUESTIONS.forEach((Q,i)=>{
+    const r=document.createElement("div");r.className="qrow";
+    r.innerHTML=`<span class="cat" style="font-size:.78rem;background:#4D96FF">${Q.cat}</span>
+      <span class="qt">${Q.q}　<span style="color:#3f9e4f">✔ ${Q.opts[Q.a]}</span></span>
+      <button class="del">刪</button>`;
+    r.querySelector(".del").onclick=()=>{QUESTIONS.splice(i,1);$("#qcount").textContent=QUESTIONS.length;drawQList();};
+    list.appendChild(r);
+  });
+}
+
+/* 初始化 */
+renderTeamEdit();
+</script>
+</body>
+</html>
