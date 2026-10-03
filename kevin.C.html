@@ -400,28 +400,69 @@
             document.getElementById('player-name').focus();
         }
 
-        const LEADERBOARD_KEY = 'primeShooterLeaderboard';
-        function getLeaderboard() { const data = localStorage.getItem(LEADERBOARD_KEY); return data ? JSON.parse(data) : []; }
-        function saveScore() {
-            const name = document.getElementById('player-name').value.trim() || "神秘挑戰者";
-            let leaderboard = getLeaderboard();
-            leaderboard.push({ name: name, score: score });
-            leaderboard.sort((a, b) => b.score - a.score); leaderboard = leaderboard.slice(0, 5); 
-            localStorage.setItem(LEADERBOARD_KEY, JSON.stringify(leaderboard));
+        // ======= 雲端線上排行榜邏輯 (Google Sheets) =======
+        
+        // ⚠️ 務必將下面這串換成您在 Step 3 複製下來的網址 ⚠️
+        const API_URL = "https://script.google.com/macros/s/AKfycbxgRvvh9hLRKIuFR4KryZTUMJ3z3x8z4u83rIIz4WZPqHwjVKx99KDf0nXxyEvRoAPh/exec";
+
+        async function saveScore() {
+            const nameInput = document.getElementById('player-name').value.trim();
+            const name = nameInput || "神秘挑戰者";
+            
+            // 按鈕顯示上傳中，並防止重複點擊
+            const btn = document.querySelector('#name-input-section button');
+            const originalText = btn.textContent;
+            btn.textContent = "資料上傳中... ⏳";
+            btn.disabled = true;
+
+            try {
+                // 將成績打包傳送給 Google 試算表
+                await fetch(API_URL, {
+                    method: 'POST',
+                    body: JSON.stringify({ name: name, score: score }),
+                    // 設定 Content-Type 為 text/plain 是為了避開瀏覽器惱人的 CORS 安全阻擋
+                    headers: { 'Content-Type': 'text/plain;charset=utf-8' } 
+                });
+            } catch(e) {
+                console.error("上傳失敗", e);
+            }
+            
+            btn.textContent = originalText;
+            btn.disabled = false;
             showLeaderboard();
         }
-        function showLeaderboard() {
+
+        async function showLeaderboard() {
             document.getElementById('name-input-section').style.display = 'none';
             document.getElementById('leaderboard-section').style.display = 'block';
-            const list = document.getElementById('leaderboard-list'); list.innerHTML = '';
-            getLeaderboard().forEach((entry, index) => {
-                const li = document.createElement('li');
-                li.style.display = 'flex'; li.style.justifyContent = 'space-between'; li.style.padding = '8px 0'; li.style.borderBottom = '2px dashed rgba(255,255,255,0.2)';
-                let medal = "🔹"; if (index === 0) medal = "🥇"; else if (index === 1) medal = "🥈"; else if (index === 2) medal = "🥉";
-                li.innerHTML = `<span>${medal} ${entry.name}</span> <span style="color:#00FF00;">${entry.score} 分</span>`;
-                list.appendChild(li);
-            });
+            
+            const list = document.getElementById('leaderboard-list');
+            list.innerHTML = '<li style="justify-content:center;">連線讀取排行榜中... 📡</li>';
+            
+            try {
+                // 從 Google 試算表讀取前五名
+                const response = await fetch(API_URL);
+                const leaderboard = await response.json();
+                
+                list.innerHTML = '';
+                if(leaderboard.length === 0) {
+                    list.innerHTML = '<li style="justify-content:center;">目前還沒有人上榜喔！</li>';
+                    return;
+                }
+
+                leaderboard.forEach((entry, index) => {
+                    const li = document.createElement('li');
+                    li.style.display = 'flex'; li.style.justifyContent = 'space-between'; li.style.padding = '8px 0'; li.style.borderBottom = '2px dashed rgba(255,255,255,0.2)';
+                    let medal = "🔹"; if (index === 0) medal = "🥇"; else if (index === 1) medal = "🥈"; else if (index === 2) medal = "🥉";
+                    li.innerHTML = `<span>${medal} ${entry.name}</span> <span style="color:#00FF00;">${entry.score} 分</span>`;
+                    list.appendChild(li);
+                });
+            } catch(e) {
+                console.error("讀取失敗", e);
+                list.innerHTML = '<li style="justify-content:center; color:#FF4500;">無法連線到伺服器 ❌</li>';
+            }
         }
+        // ==============================================
 
         function drawTunnel() {
             let config = levelsConfig[level];
