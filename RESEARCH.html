@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小小研究員：專題偵探社</title>
+<style>
+:root{--bg:#e9eff2;--ink:#12303a;--line:#b9cad1;--card:#fbfdfe;--hi:#ffe35c;--ok:#1f8a5b;--no:#c2413a;--acc:#1b6b7d}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg) repeating-linear-gradient(0deg,transparent 0 31px,#dbe5ea 31px 32px);color:var(--ink);font-family:"Noto Sans TC","PingFang TC","Microsoft JhengHei",sans-serif;font-size:18px;line-height:1.7;min-height:100vh}
+#app{max-width:760px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:2rem;margin:.2em 0;line-height:1.3}
+h2{font-size:1.4rem;margin:.2em 0}
+.card{background:var(--card);border:2px solid var(--ink);border-radius:14px;padding:20px;box-shadow:5px 5px 0 var(--ink);margin:16px 0}
+.mark{background:linear-gradient(transparent 55%,var(--hi) 55%)}
+.btn{font:inherit;font-weight:700;background:var(--ink);color:#fff;border:0;border-radius:10px;padding:10px 22px;cursor:pointer;margin-top:12px}
+.btn:disabled{opacity:.35;cursor:not-allowed}
+.btn:focus-visible,.opt:focus-visible{outline:3px solid var(--acc);outline-offset:2px}
+.opt{display:block;width:100%;text-align:left;font:inherit;background:#fff;border:2px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0;cursor:pointer;color:var(--ink)}
+.opt:hover{border-color:var(--acc)}
+.opt.sel{border-color:var(--ink);background:#fff7c2}
+.opt.ok{border-color:var(--ok);background:#e3f5ec}
+.opt.no{border-color:var(--no);background:#fbe7e5}
+.opt.miss{border-color:var(--ok);border-style:dashed}
+.bar{display:flex;gap:6px;margin-bottom:8px}
+.bar i{flex:1;height:10px;border-radius:5px;background:var(--line)}
+.bar i.on{background:var(--acc)}.bar i.r{background:var(--ok)}.bar i.w{background:var(--no)}
+.tag{display:inline-block;background:var(--ink);color:#fff;border-radius:8px;padding:0 10px;font-size:.9rem}
+.fb{border-left:6px solid var(--acc);background:#eef6f8;padding:10px 14px;margin-top:14px;border-radius:0 10px 10px 0}
+.fb.g{border-color:var(--ok)}.fb.b{border-color:var(--no)}
+.stars{font-size:2rem;letter-spacing:6px}
+.row{display:flex;gap:10px;flex-wrap:wrap}
+.lv{flex:1 1 150px;border:2px solid var(--line);border-radius:10px;padding:8px 12px;background:#fff}
+ul{padding-left:1.2em}
+.small{font-size:.95rem;color:#476672}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script>
+const L=[
+{n:'標題健檢室',i:'🔍',d:'好標題要具體、能被研究、有可以比較或測量的地方。',q:[
+{p:'哪一個標題比較適合當作小專題的標題？',o:['環境保護','不同顏色的紙杯，哪一種保溫效果最好？','我愛紙杯'],a:[1],e:'第二個標題有明確的對象（紙杯）和可以比較、測量的結果（保溫效果）。「環境保護」範圍太大，「我愛紙杯」只是心情，沒有問題可以研究。'},
+{p:'哪一個標題的問題可以用觀察或調查找出答案？',o:['動物很可愛','校園裡的鳥類在一天中哪個時段最常出現？','世界上最好的動物是什麼？'],a:[1],e:'「最好」、「可愛」是個人感覺，沒有標準可以測。第二個標題能靠記錄次數和時間來回答。'},
+{p:'下面哪些標題有問題？（可複選）',m:1,o:['植物','不同光照下，綠豆芽的生長高度比較','為什麼天空是藍色的，我覺得很美','班上同學最喜歡的營養午餐菜色調查'],a:[0,2],e:'「植物」範圍太大，不知道要研究什麼；「我覺得很美」是感想，不是研究問題。另外兩個都有明確對象和做法。'},
+{p:'把「研究蝸牛」改成哪一個標題最好？',o:['蝸牛研究','蝸牛喜歡躲在潮濕還是乾燥的地方？','蝸牛的一生'],a:[1],e:'好標題會把「研究什麼」縮小成一個能做的問題，並且有兩個可以比較的條件（潮濕、乾燥）。'},
+{p:"哪一個標題裡有「可以比較的條件」？",o:["我家的小狗", "澆水量不同，豆苗長得一樣高嗎？", "植物為什麼可愛"],a:[1],e:"標題中有「澆水量不同」這個可以改變的條件，也有「高度」可以測量。其他兩個沒有可比較、可測量的地方。"},
+{p:"標題是「研究校園」，最大的問題是什麼？",o:["範圍太大，看不出要研究校園的什麼", "字數太少", "沒有標點符號"],a:[0],e:"校園裡有花草、動物、設施、人，範圍太廣。要縮小成一個明確的問題才好研究。"},
+{p:"下面哪些標題可以直接做成小專題？（可複選）",m:1,o:["不同材質的杯墊，哪一種吸水最快？", "怎樣才是幸福的人生？", "全班同學每天走路上學的時間調查", "宇宙裡有沒有外星人？"],a:[0, 2],e:"能用實驗、調查或觀察得到資料的題目才適合。「幸福」沒有統一標準，「外星人」我們無法取得資料。"},
+{p:"關於好標題，哪一個說法正確？",o:["標題越長越好", "要讓人看得出研究對象和想知道的事", "只要好聽就好"],a:[1],e:"標題不是越長越好，也不是越好聽越好，而是要清楚說明「研究什麼、想知道什麼」。"},
+{p:"哪一個標題太簡單，查一下資料就知道答案，不太需要研究？",o:["臺灣最高的山是哪一座？", "不同坡度的斜面，小車滑下的速度有什麼不同？", "午休前後，同學的專心程度有差嗎？"],a:[0],e:"答案已經存在、查資料就能得到的問題，不需要自己做研究。研究要去找還不知道的答案。"},
+{p:"把「研究塑膠袋」改成哪一個標題最好？",o:["塑膠袋的壞處", "教室垃圾桶裡，一週內丟棄的塑膠袋有多少個？", "我討厭塑膠袋"],a:[1],e:"第二個標題有明確範圍（教室、一週）和可以計算的結果（數量）。其他兩個只是看法。"}]},
+{n:'動機偵探社',i:'🕵️',d:'好動機會說出自己看到什麼、好奇什麼、想知道什麼，而不是喊口號。',q:[
+{p:'哪一段研究動機比較好？',o:['因為環保很重要，所以我要研究它。','我發現教室後面的盆栽比窗邊的長得慢，我好奇是不是光線造成的，所以想研究。','老師說做這個題目很簡單，所以我選這個。'],a:[1],e:'第二段有自己的觀察（長得慢）、好奇的原因（光線）和想知道的事。第一段只是口號，第三段與研究問題無關。'},
+{p:'一段完整的研究動機，順序最適合是哪一個？',o:['說一個大道理 → 說我很厲害 → 結束','我觀察到的現象 → 我產生的疑問 → 我想知道什麼','研究方法 → 研究結果 → 我的感想'],a:[1],e:'動機像是研究的「起點故事」：先看到，再好奇，再決定要找答案。方法和結果屬於後面的部分。'},
+{p:'題目是「機翼形狀會影響紙飛機飛行距離嗎？」哪些句子適合放進研究動機？（可複選）',m:1,o:['我在操場玩紙飛機時，發現有的飛很遠，有的一下就掉下來。','老師說這個題目很容易拿高分。','我想知道機翼的形狀是不是造成差別的原因。','我哥哥說他最會摺紙飛機，我要贏過他。'],a:[0,2],e:'好的動機要跟問題有關，並且來自自己的觀察與好奇。拿高分、和哥哥比賽都不是研究想知道的事。'},
+{p:'「我想研究蜜蜂，因為蜜蜂對生態很重要，大家都應該愛護動物。」這段動機的問題在哪裡？',o:['沒有說出自己的觀察和好奇，只有口號','句子太短','用了太多專有名詞'],a:[0],e:'這段話看不出「你」為什麼想研究，也沒有說出想知道什麼。'},
+{p:"哪一段動機有「自己的觀察」？",o:["很多書都說運動很重要。", "我發現下課愛跑跳的同學，上課比較有精神，想知道運動和專心有沒有關係。", "運動是現代人必備的習慣。"],a:[1],e:"第二段說出了自己看到的現象，再延伸出疑問。其他兩句是別人的說法或口號。"},
+{p:"「因為地球暖化很嚴重，所以我要研究冰塊融化的速度。」這段動機的問題是什麼？",o:["從大道理一下子跳到小實驗，沒說出自己看到什麼", "太短", "用了數字"],a:[0],e:"動機要讓人看出「你為什麼會想做這個研究」，大道理和題目之間要有自己的觀察當橋梁。"},
+{p:"題目是「午餐剩菜調查」，哪些句子不適合放進動機？（可複選）",m:1,o:["我發現午餐時，湯品和青菜常常剩得比較多。", "我想知道同學為什麼剩下這些菜。", "這個題目看起來很厲害，也許可以得獎。", "網路上說剩食是全世界的問題，大家都該節約。"],a:[2, 3],e:"「得獎」不是研究的理由，空泛的口號也沒說出自己的觀察。前兩句才是研究真正的起點。"},
+{p:"題目是「不同鞋底的止滑效果」，哪一段動機和題目最一致？",o:["下雨天我在走廊差點滑倒，好奇哪一種鞋底比較不容易滑。", "我喜歡運動鞋，因為很帥。", "球鞋的價格都很貴。"],a:[0],e:"動機要引出題目。第一段從滑倒的經驗引出「止滑」的問題，與題目完全對得上。"},
+{p:"動機的最後一句通常最適合寫什麼？",o:["我想知道的問題", "我的考試成績", "老師的名字"],a:[0],e:"動機的結尾要把好奇變成「想知道的問題」，才能銜接到後面的研究。"},
+{p:"寫研究動機，哪一種寫法比較好？",o:["抄網路上現成的句子", "用自己的話寫出觀察和好奇", "只寫「這個研究很重要」"],a:[1],e:"動機是自己的想法。抄來的句子和空洞的口號，審查委員看不出你真正的想法。"}]},
+{n:'資料鑑定所',i:'📚',d:'好文獻要看出處、作者、日期，還要和自己的問題有關。',q:[
+{p:'想了解「喝含糖飲料對牙齒的影響」，哪些資料比較可信？（可複選）',m:1,o:['衛生福利部國民健康署的衛教文章','某飲料廣告：「喝了完全不傷牙！」','牙醫師公會的科普文章，附作者與日期','論壇匿名留言：「我喝十年都沒蛀牙」'],a:[0,2],e:'可信的資料有清楚的出處和專業作者。廣告想賣東西，匿名留言只是個人經驗，沒有證據。'},
+{p:'想知道「臺灣國小學生近視比例」，哪一份資料最適合？',o:['2005年的舊新聞','近年教育部或衛福部的調查報告','朋友說班上很多人近視'],a:[1],e:'數字會隨時間改變，要找新的、官方的調查。朋友的說法只代表一小群人。'},
+{p:'研究「蝸牛喜歡潮濕還是乾燥的地方」，哪一份資料最相關？',o:['蝸牛的棲息環境與習性','蝸牛料理食譜','蝸牛殼的歷史故事'],a:[0],e:'資料再有名，如果跟自己的問題無關，也幫不上忙。要挑能回答問題的資料。'},
+{p:'讀完資料後，文獻紀錄應該寫下什麼？',o:['只寫「我在網路上看到」','作者或單位、資料名稱、日期、網址','把整篇文章直接抄下來'],a:[1],e:'寫出處，別人才能檢查你的資料，也能分辨哪些是別人的想法、哪些是自己的發現。'},
+{p:"哪一個是「第一手資料」（自己親自觀察或測量得到的）？",o:["課本上的圖表", "我自己連續一週記錄的每日氣溫", "科普網站的文章"],a:[1],e:"自己動手觀察、測量、調查得到的是第一手資料；別人整理好的資料屬於第二手資料。"},
+{p:"判斷一份資料可不可信，可以看哪些地方？（可複選）",m:1,o:["作者或單位是誰", "資料寫的日期", "網頁背景好不好看", "有沒有證據或數據"],a:[0, 1, 3],e:"作者、日期和證據是判斷可信度的重點。網頁好不好看，和內容正不正確沒有關係。"},
+{p:"兩份資料說法不一樣時，最好怎麼做？",o:["選自己喜歡的那一份", "查看兩份的出處，再找第三份資料比對", "兩份都不要看"],a:[1],e:"說法衝突時，要檢查出處與證據，再用更多資料來確認。"},
+{p:"哪一種資料最可能有偏頗？",o:["保健食品公司的網站寫「保證有效」", "大學的研究報告", "政府的統計資料"],a:[0],e:"賣東西的一方，常常只會說對自己有利的話。"},
+{p:"研究「教室光線和專心程度的關係」，哪組關鍵字最適合拿去查資料？",o:["好", "光線 亮度 專注 學習", "學校"],a:[1],e:"關鍵字要和問題直接相關，又不能太籠統，才查得到有用的資料。"},
+{p:"想研究「兒童使用手機的時間」，哪些資料有用？（可複選）",m:1,o:["教育部或衛福部的兒童3C使用調查", "某網紅說手機沒有壞處", "大學研究：使用時間與睡眠的關係，附作者與日期", "聽說鄰居的小孩整天玩手機"],a:[0, 2],e:"有出處、有調查方法的資料才適合當文獻。網紅的說法和聽說的事缺乏證據。"}]},
+{n:'方法工具箱',i:'🧰',d:'研究方法要跟著研究問題走，設計時還要檢查有沒有漏洞。',q:[
+{p:'「哪一種紙飛機飛得最遠？」最適合用哪一種研究方法？',o:['實驗：每次只改一種條件，測量距離','問卷：問同學喜歡哪種','訪談：問老師的意見'],a:[0],e:'要比較不同條件造成的結果，就要做實驗，並且測量飛行距離。'},
+{p:'「爺爺奶奶小時候怎麼過年？」最適合用哪一種方法？',o:['實驗','訪談','天氣觀察'],a:[1],e:'想了解過去的經驗和故事，最好直接訪問當事人。'},
+{p:'小明比較三種肥料對植物的影響：A肥料的植物放窗邊，B肥料放櫃子上，C肥料放陰暗角落。這個設計的問題是什麼？',o:['植物太多','沒有控制其他變因（光照不同）','肥料太貴'],a:[1],e:'三盆植物的光照不同，長得不一樣就分不出是肥料還是光照造成的。除了肥料，其他條件都要一樣。'},
+{p:'下面哪一個問卷題目有「引導性」，不適合使用？',o:['你每天大約喝多少水？','大家都知道喝水很健康，你是不是很愛喝水？','你每週喝幾次手搖飲？'],a:[1],e:'第二題先說了「喝水很健康」，會讓人跟著說「是」。問卷題目要中立，讓人誠實回答。'},
+{p:"「班上同學最喜歡哪一種運動？」最適合用哪一種研究方法？",o:["問卷調查", "實驗", "查字典"],a:[0],e:"想知道很多人的喜好和選擇，問卷最有效率。"},
+{p:"「蝸牛喜歡躲在哪裡？」最適合用哪一種研究方法？",o:["觀察並記錄蝸牛的位置", "問卷", "訪談校長"],a:[0],e:"要知道動物在自然情況下的行為，就需要仔細觀察並做紀錄。"},
+{p:"小華比較三種紙杯的保溫效果，每種杯子只測了一次。這個設計有什麼問題？",o:["測量次數太少，結果可能只是偶然", "杯子太便宜", "水太熱"],a:[0],e:"一次的結果可能是運氣，重複測量幾次再取平均，比較可靠。"},
+{p:"比較不同肥料對植物的影響時，哪些條件應該保持一樣？（可複選）",m:1,o:["澆水量", "肥料的種類", "光照", "花盆大小"],a:[0, 2, 3],e:"要比較的只有「肥料種類」，這是會改變的條件；其他條件都要一樣，結果才能公平比較。"},
+{p:"只問了3位同學，就想知道全班的喜好，問題在哪裡？",o:["樣本太少，不能代表全班", "問卷太長", "同學太忙"],a:[0],e:"調查的人數太少，結果不能代表全班。要盡量調查更多人。"},
+{p:"想知道「早上校門口的車流量」，哪一個做法最適合？",o:["在固定時間站在校門口，用劃記記錄車輛數量", "問卷", "訪談校長"],a:[0],e:"要知道現場實際發生的數量，就要在固定時間和地點直接觀察計數。"}]}
+];
+const $=s=>document.querySelector(s),app=$('#app');
+const sh=a=>{a=[...a];for(let i=a.length-1;i>0;i--){let j=Math.random()*(i+1)|0;[a[i],a[j]]=[a[j],a[i]]}return a};
+let li,qi,sc,res,ord,sel,done;
+function start(){app.innerHTML=`<div class="card"><span class="tag">小小研究所 · 新進研究員報到</span>
+<h1>小小研究員：<span class="mark">專題偵探社</span></h1>
+<p>研究所收到一份份「研究計畫」，但有些寫得很好，有些藏著問題。你要通過四個關卡，學會分辨好壞。</p>
+<div class="row">${L.map(l=>`<div class="lv">${l.i} ${l.n}</div>`).join('')}</div>
+<p class="small">每關 10 題。作答時沒有提示，送出答案後才會看到解析。</p>
+<button class="btn" onclick="begin()">開始研究</button></div>`}
+function begin(){li=0;sc=[0,0,0,0];res=[[],[],[],[]];intro()}
+function intro(){const l=L[li];app.innerHTML=`<div class="card"><span class="tag">第 ${li+1} 關</span>
+<h1>${l.i} ${l.n}</h1><p>${l.d}</p><button class="btn" onclick="qi=0;ask()">進入關卡</button></div>`}
+function ask(){const q=L[li].q[qi];ord=sh(q.o.map((_,i)=>i));sel=new Set();done=false;draw()}
+function draw(){const l=L[li],q=l.q[qi];
+const bar=l.q.map((_,i)=>`<i class="${i<qi?(res[li][i]?'r':'w'):i==qi?'on':''}"></i>`).join('');
+const opts=ord.map(i=>{let c='opt';if(done){const right=q.a.includes(i),pick=sel.has(i);c+=right&&pick?' ok':pick?' no':right?' miss':''}else if(sel.has(i))c+=' sel';
+return `<button class="${c}" onclick="pick(${i})" ${done?'disabled':''}>${q.o[i]}</button>`}).join('');
+let fb='';if(done){const ok=res[li][qi];fb=`<div class="fb ${ok?'g':'b'}"><b>${ok?'答對了！':'這題要再想想。'}</b><br>${q.e}</div>
+<button class="btn" onclick="next()">${qi<9?'下一題':'看本關結果'}</button>`}
+else fb=`<button class="btn" onclick="submit()" ${sel.size?'':'disabled'}>送出答案</button>`;
+app.innerHTML=`<div class="bar">${bar}</div><div class="card"><span class="tag">${l.i} ${l.n} · 第 ${qi+1} 題</span>
+<h2>${q.p}</h2>${q.m?'<p class="small">這題可以選一個以上的答案。</p>':''}${opts}${fb}</div>`}
+function pick(i){if(done)return;const q=L[li].q[qi];if(q.m){sel.has(i)?sel.delete(i):sel.add(i)}else sel=new Set([i]);draw()}
+function submit(){const q=L[li].q[qi];done=true;const ok=sel.size==q.a.length&&q.a.every(x=>sel.has(x));res[li][qi]=ok;if(ok)sc[li]++;draw()}
+function next(){if(qi<9){qi++;ask()}else levelEnd()}
+function levelEnd(){const l=L[li],s=sc[li],last=li==3;
+app.innerHTML=`<div class="card"><span class="tag">${l.i} ${l.n} · 本關結果</span>
+<div class="stars">${'★'.repeat(s)}${'☆'.repeat(10-s)}</div>
+<h2>${s>=7?'獲得「'+l.n+'」徽章！':'還差一點，徽章尚未取得'}</h2>
+<p>答對 ${s} / 10 題。${s>=7?'':'答對 7 題以上就能取得徽章，可以重新挑戰這一關。'}</p>
+<div class="row"><button class="btn" onclick="sc[li]=0;res[li]=[];qi=0;ask()">重新挑戰這一關</button>
+<button class="btn" onclick="${last?'final()':'li++;intro()'}">${last?'前往總結':'下一關'}</button></div></div>`}
+function final(){const t=sc.reduce((a,b)=>a+b,0),got=sc.filter(s=>s>=7).length;
+const rank=t>=34?'審查委員':t>=28?'研究員':t>=20?'助理研究員':'實習研究員';
+const weak=L.filter((_,i)=>sc[i]<7);
+app.innerHTML=`<div class="card"><span class="tag">研究所頒獎</span><h1>你的職稱：<span class="mark">${rank}</span></h1>
+<div class="stars">${t} / 40</div>
+<div class="row">${L.map((l,i)=>`<div class="lv">${l.i} ${l.n}<br>${'★'.repeat(sc[i])}${'☆'.repeat(10-sc[i])} ${sc[i]>=7?'🏅':''}</div>`).join('')}</div>
+<p>取得 ${got} 枚徽章。${weak.length?'需要再複習：'+weak.map(l=>l.n).join('、')+'。':'四個部分都很穩，可以開始寫自己的研究計畫了！'}</p>
+<p class="small">下一步：用「標題、動機、文獻、方法」四個部分，寫一份自己的小專題計畫，再和同學互相審查。</p>
+<button class="btn" onclick="begin()">再玩一次</button></div>`}
+start();
+</script>
+</body>
+</html>
